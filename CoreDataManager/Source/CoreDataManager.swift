@@ -8,40 +8,13 @@
 
 import CoreData
 
-// Base code from this URL
-// http://williamboles.me/step-by-step-core-data-migration/  In case of needing manual migrations, this post seems quite interesting
-// En este repo esta el codigo completo usado en esta clase mas un sistema de migracion semi-automatico que he de mirar
-// https://github.com/wibosco/CoreDataMigrationRevised-Example
-// La info referente a esto esta aqui:
-// https://williamboles.me/progressive-core-data-migration/
+public final class CoreDataManager {
 
-
-
-
-// Otra version aqui:
-// Este tio menciona que es su solucion "tras mirar mucha documentacion outdated y liosa" y haberse aclarado un poco
-// https://medium.com/@duncsand/threading-43a9081284e5
-//
-// Si lo de arriba no termina de convencerme, echar un vistazo a esto:
-// https://www.raywenderlich.com/7586-multiple-managed-object-contexts-with-core-data-tutorial
-
-
-
-// Info sobre la manera "chachi" de hacerlo.
-//https://stackoverflow.com/questions/42733574/nspersistentcontainer-concurrency-for-saving-to-core-data
-
-
-// Otra manera chula: https://samwize.com/2018/09/01/modern-guide-to-core-data-2018/
-
-// ULTIMO VISTAZO, EMPEZAR POR AQUI:  https://medium.com/@aliakhtar_16369/mastering-in-coredata-part-3-coding-crud-in-core-data-b7a278436c3
-
-public final class CoreDataManager : CustomStringConvertible{
-    
     public static let shared = CoreDataManager()
     
     private var setupWasCalled = false
     private var modelName : String!
-    private let persistentContainerQueue : OperationQueue
+
     
     // ------------------------------------------------------------
     // PROPERTIES
@@ -52,20 +25,17 @@ public final class CoreDataManager : CustomStringConvertible{
         return persistentContainer
     }()
     
-    // Concurrencytype =  NSPrivateQueueConcurrencyType
-    lazy var backgroundContext: NSManagedObjectContext = {
+    public lazy var backgroundContext: NSManagedObjectContext = {
         let context = self.persistentContainer.newBackgroundContext()
         context.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
         context.automaticallyMergesChangesFromParent = true
         return context
     }()
     
-    // ConcurrencyType = NSMainQueueConcurrencyType
-    // Solo puede ser usado con la main queue de la app (main thread?)
-    // Hacer siempre los fetch via este context
-    lazy var mainContext: NSManagedObjectContext = {
+    public lazy var mainContext: NSManagedObjectContext = {
         let context = self.persistentContainer.viewContext
         context.shouldDeleteInaccessibleFaults = true
+        context.automaticallyMergesChangesFromParent = true
         return context
     }()
 
@@ -75,8 +45,8 @@ public final class CoreDataManager : CustomStringConvertible{
     // ------------------------------------------------------------
     // MARK: - Init-Deinit
     private init(){
-        self.persistentContainerQueue = OperationQueue()
-        self.persistentContainerQueue.maxConcurrentOperationCount = 1
+        //self.persistentContainerQueue = OperationQueue()
+        //self.persistentContainerQueue.maxConcurrentOperationCount = 1
     }
     
     deinit{
@@ -94,17 +64,21 @@ public final class CoreDataManager : CustomStringConvertible{
     /// Asynchronously initializes CoreDataManager stack. Must be called before doing any other operation related to Core Data.
     /// - Parameter name: Core Data model filename.
     /// - Parameter completion: A completion block that will be executed whenever the setup process succeeds.
-    public func setup(withModel name:String, completion: @escaping () -> Void) {
+    public func setup(withModel name:String, completion: @escaping () -> Void, error: @escaping (_ error:Error?) -> Void) {
         self.setupWasCalled = true
         self.modelName = name
         
         guard Bundle.main.url(forResource: self.modelName, withExtension: "momd") != nil else{
-            fatalError("CoreDataManager ERROR Loading: Model file named '\(name)' not found.")
+            print("CoreDataManager ERROR Loading: Model file named '\(name)' not found.")
+            error(CoreDataManagerError.modelNotFound)
+            return
         }
-        
-        self.persistentContainer.loadPersistentStores { description, error in
-            guard error == nil else {
-                fatalError("CoreDataManager ERROR Loading: \(error!)")
+
+        self.persistentContainer.loadPersistentStores { description, cderror in
+            guard cderror == nil else {
+                print("CoreDataManager ERROR Loading: \(cderror!)")
+                error(cderror)
+                return
             }
             completion()
         }
@@ -117,76 +91,134 @@ public final class CoreDataManager : CustomStringConvertible{
    
     // ------------------------------------------------------------
     // CREATE
-    
-    /*
-    
-    DB.default.container.performBackgroundTask { context in
-        let note = Note(context: context)
-        note.content = "Hello World"
-        note.priority = 99
-        try! context.save()
-    }
-    */
-    
-    
-    public func saveContext() -> Bool{
+    public func create(withBlock block: @escaping (_ context:NSManagedObjectContext) -> Void , error: @escaping (_ error:Error?) -> Void){
         guard setupWasCalled == true else{
             print("CoreDataManager ERROR: Setup method wasn't called, persistentStores may not be loaded.")
-            return false
+            error(CoreDataManagerError.setupNotCalled)
+            return
         }
         
-        let context = self.mainContext
-        if context.hasChanges {
-            do {
-                try context.save()
-                return true
+        print("CREATING IN CORE DATA")
+        // Creates a task with a new background context created on the fly
+        persistentContainer.performBackgroundTask { context in
+            
+            block(context)
 
-            } catch {
-                print("CoreDataManager ERROR Saving: \(error)")
-                return false
+            do {
+                print("SAVING IN CORE DATA")
+                // Saves the entries created in the `forEach`
+                try context.save()
+                print("SAVED IN CORE DATA")
+                
+            } catch let saveError{
+                error(saveError)
+                fatalError("Failure to save context: \(saveError)")
             }
         }
-        return false
         
-        
-        /*
-        
-        
-        container.performBackgroundTask { (context) in
-         for _ in 0…100000 {
-             let user = User(context: context)
-             user.name = name
-             user.lastName = lastName
-         }
-         do {
-             try context.save()
-             print(“Usuario \(name) guardado”)
-             //2
-             DispatchQueue.main.async {
-                 completion()
-             }
-          } catch {
-            print(“Error guardando usuario — \(error)”)
-          }
-        } // fin del performBackgroundTask
-     */
     }
     
     // ------------------------------------------------------------
     // READ
-    public func executeFetch(request: NSFetchRequest<NSFetchRequestResult>) -> [Any] {
+    /*
+    /// Synchronously executes a fetch request.
+    /// - Parameter request: The `NSFetchRequest` to use as an entity selector.
+    /// - Returns: An array containing the `NSManagedObject` list resulting from the fetch request.
+    public func fetchObjects(from request: NSFetchRequest<NSFetchRequestResult>) -> [NSManagedObject] {
         do{
-            return try mainContext.fetch(request)
+            guard let result = try mainContext.fetch(request) as? [NSManagedObject] else {
+                print("CoreDataManager ERROR Async Fetching: Result can't be casted to NSManagedObject")
+                return []
+            }
+            return result
+            
         }catch{
             print("CoreDataManager ERROR Fetching: \(error)")
         }
         
-        return [Any]()
+        return []
     }
+    */
 
+    /// Asynchronously executes a fetch request.
+    /// - Parameter request: The `NSFetchRequest` to use as an entity selector.
+    /// - Parameter completion: A completion block that will be called in the main thread, with the results assigned.
+    public func fetchObjectsAsync(from request: NSFetchRequest<NSFetchRequestResult>, completion: @escaping (_ result:[NSManagedObject]) -> Void){
+        guard setupWasCalled == true else{
+            print("CoreDataManager ERROR: Setup method wasn't called, persistentStores may not be loaded.")
+            return
+        }
+        
+        // Creates `asynchronousFetchRequest` with the fetch request and the completion closure
+        let asynchronousFetchRequest = NSAsynchronousFetchRequest(fetchRequest: request) { asynchronousFetchResult in
+ 
+            guard let result = asynchronousFetchResult.finalResult as? [NSManagedObject] else {
+                print("CoreDataManager ERROR Async Fetching: Result can't be casted to NSManagedObject")
+                return
+            }
+            print("THREAD ASYNCREQUEST: \(Thread.current)")
+            // We refetch objects from its ObjectID in the main queue
+            DispatchQueue.main.async {
+                var objectList = [NSManagedObject]()
+                for item in result {
+                    let itemID = item.objectID
+                    let queueSafeItem = self.mainContext.object(with: itemID)
+                    objectList.append(queueSafeItem)
+                }
+                completion(objectList)
+            }
+        }
+        print("THREAD: \(Thread.current)")
+        do {
+            try backgroundContext.execute(asynchronousFetchRequest)
+        } catch {
+            print("CoreDataManager ERROR Async Fetching: \(error)")
+        }
+        
+    }
     
     // ------------------------------------------------------------
     // UPDATE
+    
+    public func updateObjetsAsync(){
+        guard setupWasCalled == true else{
+            print("CoreDataManager ERROR: Setup method wasn't called, persistentStores may not be loaded.")
+            return
+        }
+        
+        persistentContainer.performBackgroundTask { privateManagedObjectContext in
+            // Creates new batch update request for entity `Dog`
+            let updateRequest = NSBatchUpdateRequest(entityName: "TodoTask")
+            // All the dogs with `isFavorite` true
+            let predicate = NSPredicate(format: "done == true")
+            // Assigns the predicate to the batch update
+            updateRequest.predicate = predicate
+
+            // Dictionary with the property names to update as keys and the new values as values
+            updateRequest.propertiesToUpdate = ["isFavorite": false]
+
+            // Sets the result type as array of object IDs updated
+            updateRequest.resultType = .updatedObjectIDsResultType
+
+            do {
+                // Executes batch
+                let result = try privateManagedObjectContext.execute(updateRequest) as? NSBatchUpdateResult
+
+                // Retrieves the IDs deleted
+                guard let objectIDs = result?.result as? [NSManagedObjectID] else {
+                    print("CoreDataManager ERROR Removing: Objects retreived are not IDs")
+                    return
+                }
+
+                // Updates the main context
+                let changes = [NSUpdatedObjectsKey: objectIDs]
+                NSManagedObjectContext.mergeChanges(fromRemoteContextSave: changes, into: [self.mainContext])
+                
+            } catch {
+                fatalError("Failed to execute request: \(error)")
+            }
+        }
+    }
     
     
     
@@ -195,17 +227,43 @@ public final class CoreDataManager : CustomStringConvertible{
     
     /// Deletes all `NSManagedObject` entities selected by a `NSFetchRequest`.
     /// - Parameter request: The `NSFetchRequest` to use as an entity selector.
-    public func delete(entitiesFrom request:NSFetchRequest<NSFetchRequestResult>) {
-        enqueue { (bgrContext) in
-            let deleteBatch = NSBatchDeleteRequest(fetchRequest: request)
-            deleteBatch.resultType = .resultTypeObjectIDs
-            do{
-                try bgrContext.execute(deleteBatch)
+    public func deleteObjects(from request:NSFetchRequest<NSFetchRequestResult>) {
+        guard setupWasCalled == true else{
+            print("CoreDataManager ERROR: Setup method wasn't called, persistentStores may not be loaded.")
+            return
+        }
+        
+        print("DELETING OBJECTS")
+        
+        persistentContainer.performBackgroundTask { privateManagedObjectContext in
+            print("PERFORMING IN BGR 1")
+            // Creates new batch delete request with a specific request
+            let deleteRequest = NSBatchDeleteRequest(fetchRequest: request)
+
+            // Asks to return the objectIDs deleted
+            deleteRequest.resultType = .resultTypeObjectIDs
+
+            do {
                 
-            }catch{
+                print("PERFORMING IN BGR 2")
+                // Executes batch
+                let result = try privateManagedObjectContext.execute(deleteRequest) as? NSBatchDeleteResult
+
+                // Retrieves the IDs deleted
+                guard let objectIDs = result?.result as? [NSManagedObjectID] else {
+                    print("CoreDataManager ERROR Removing: Objects retreived are not IDs")
+                    return
+                }
+Thread.sleep(forTimeInterval:3)
+                // Updates the main context
+                let changes = [NSDeletedObjectsKey: objectIDs]
+                NSManagedObjectContext.mergeChanges(fromRemoteContextSave: changes, into: [self.mainContext])
+                print("PERFORMING IN BGR 3")
+            } catch {
                 print("CoreDataManager ERROR Removing: \(error)")
             }
         }
+        
     }
     
     // ------------------------------------------------------------
@@ -227,52 +285,11 @@ public final class CoreDataManager : CustomStringConvertible{
         context.reset()
     }
     
-    // From CustomStringConvertible
-    public var description: String {
-        "\(CoreDataManager.self): Context=\(mainContext); BgrContext=\(backgroundContext))"
-    }
-    
-    // ------------------------------------------------------------
-    // PRIVATE METHODS
-    // ------------------------------------------------------------
-    // MARK: - Private methods
-    // En estos dos aparecen los comentarios que dan lugar a este metodo. Echar un vistazo para dar con el funcionamiento "general"
-   // de todo esto...
-   // https://stackoverflow.com/questions/51014065/whats-the-best-practice-for-nspersistentcontainer-newbackgroundcontext
-   // https://stackoverflow.com/questions/42733574/nspersistentcontainer-concurrency-for-saving-to-core-data
-    private func enqueue(block: @escaping (_ context: NSManagedObjectContext) -> Void) {
-        persistentContainerQueue.addOperation(){
-            self.backgroundContext.performAndWait{
-                block(self.backgroundContext)
-                try? self.backgroundContext.save() //Don't just use '?' here look at the error and log it to your analytics service
-            }
+    public func saveContext(completion: @escaping () -> Void){
+        guard setupWasCalled == true else{
+            print("CoreDataManager ERROR: Setup method wasn't called, persistentStores may not be loaded.")
+            return
         }
     }
-}
-
-
-
-
-
-
-/// Removes all `NSManagedObject` entities selected by a `NSFetchRequest`.
-///
-/// - Parameter request: The `NSFetchRequest` to use as an entity selector.
-/// - Returns: A boolean representing operation success.
-/*
-public func remove(entitiesFrom request:NSFetchRequest<NSFetchRequestResult>) -> Bool{
-     let deleteBatch = NSBatchDeleteRequest(fetchRequest: request)
-     deleteBatch.resultType = .resultTypeObjectIDs
     
-     do {
-         let result = try backgroundContext.execute(deleteBatch) as? NSBatchDeleteResult
-         let changes: [AnyHashable: Any] = [NSDeletedObjectsKey: result?.result as? [NSManagedObjectID] ?? []]
-         NSManagedObjectContext.mergeChanges(fromRemoteContextSave: changes, into: [mainContext])
-         return true
-
-    }catch {
-        print("CoreDataManager ERROR Removing: \(error)")
-        return false
-    }
 }
-*/
