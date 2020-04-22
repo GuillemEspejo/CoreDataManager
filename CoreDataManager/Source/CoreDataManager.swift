@@ -8,6 +8,10 @@
 
 import CoreData
 
+/// A class representing a full Core Data Stack.
+///
+/// Todo
+///
 public final class CoreDataManager {
 
     public static let shared = CoreDataManager()
@@ -25,6 +29,8 @@ public final class CoreDataManager {
         return persistentContainer
     }()
     
+    /// An instance of `NSManagedObjectContext` that can be used for background operations.
+    /// It's assigned automatically to a private background queue.
     public lazy var backgroundContext: NSManagedObjectContext = {
         let context = self.persistentContainer.newBackgroundContext()
         context.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
@@ -32,6 +38,8 @@ public final class CoreDataManager {
         return context
     }()
     
+    /// An instance of `NSManagedObjectContext` that can be used for standard operations.
+    /// It's assigned automatically to the main queue.
     public lazy var mainContext: NSManagedObjectContext = {
         let context = self.persistentContainer.viewContext
         context.shouldDeleteInaccessibleFaults = true
@@ -45,8 +53,7 @@ public final class CoreDataManager {
     // ------------------------------------------------------------
     // MARK: - Init-Deinit
     private init(){
-        //self.persistentContainerQueue = OperationQueue()
-        //self.persistentContainerQueue.maxConcurrentOperationCount = 1
+        
     }
     
     deinit{
@@ -61,26 +68,26 @@ public final class CoreDataManager {
     // SETUP
     // ------------------------------------------------------------
     // MARK: - Setup
-    /// Asynchronously initializes CoreDataManager stack. Must be called before doing any other operation related to Core Data.
-    /// - Parameter name: Core Data model filename.
-    /// - Parameter completion: A completion block that will be executed whenever the setup process succeeds.
-    public func setup(withModel name:String, completion: @escaping () -> Void, error: @escaping (_ error:Error?) -> Void) {
+    ///
+    /// Initializes **CoreDataManager** stack.
+    ///
+    /// This method must be called before doing any other operation related to Core Data when using CoreDataManager.
+    /// As the initialization of Core Data is inherently asynchronous, it accepts a completion block.
+    /// - Parameters:
+    ///   - name: Core Data model filename.
+    ///   - completion: A completion block that will be executed in the main thread whenever the setup finishes.
+    ///   - error: If operation fails, completion block will be called with this value set, being nil if succeeded.
+    public func setup(withModel name:String, completion: @escaping (_ error: Error?) -> () ){
         self.setupWasCalled = true
         self.modelName = name
         
         guard Bundle.main.url(forResource: self.modelName, withExtension: "momd") != nil else{
-            print("CoreDataManager ERROR Loading: Model file named '\(name)' not found.")
-            error(CoreDataManagerError.modelNotFound)
+            completion(CoreDataManagerError.modelNotFound)
             return
         }
 
-        self.persistentContainer.loadPersistentStores { description, cderror in
-            guard cderror == nil else {
-                print("CoreDataManager ERROR Loading: \(cderror!)")
-                error(cderror)
-                return
-            }
-            completion()
+        self.persistentContainer.loadPersistentStores { description, error in
+            completion(error)            
         }
     }
     
@@ -91,61 +98,143 @@ public final class CoreDataManager {
    
     // ------------------------------------------------------------
     // CREATE
-    public func create(withBlock block: @escaping (_ context:NSManagedObjectContext) -> Void , error: @escaping (_ error:Error?) -> Void){
+    ///
+    /// Creates and inserts objects in Core Data.
+    ///
+    /// Use this method whenever you want to insert objects into Core Data. The method will take care of creating and saving
+    /// the data to the persistent store.
+    /// Due to this, so you should **only** use the context provided within the block as a parameter for the NSManagedObject constructor.
+    /// Any other use can lead to unexpected behavior.
+    ///
+    /// This call will be internally attached to the main queue and will be **blocking**. Any use of an additional queue when creating
+    /// the NSManagedObject will lead to crashes. This is standard Core Data behaviour as it's not thread safe.
+    ///
+    /// If you want a non blocking option, you must call `createObjectAsync`
+    ///
+    /// - Parameters:
+    ///   - block: A creation block where you must create the NSManagedObject subclasses to be inserted into Core Data.
+    ///   - context: An instance of an NSManagedObjectContext allowing you to create NSManagedObject subclasses.
+    /// - Returns:
+    ///   An optional `Error` that will be nil if operation succeeds.
+    ///
+    public func createObject(using block: @escaping (_ context:NSManagedObjectContext) -> () ) -> Error?{
         guard setupWasCalled == true else{
-            print("CoreDataManager ERROR: Setup method wasn't called, persistentStores may not be loaded.")
-            error(CoreDataManagerError.setupNotCalled)
+            return CoreDataManagerError.setupNotCalled
+        }
+        
+        var operationError : Error?
+        
+        // Blocking!
+        mainContext.performAndWait {
+            block(mainContext)
+            if mainContext.hasChanges {
+                do {
+                    try mainContext.save()
+                } catch {
+                    operationError = error
+                }
+            }
+        }
+        
+        return operationError
+
+    }
+        
+    ///
+    /// Creates and inserts objects in Core Data asynchronously.
+    ///
+    /// Use this method whenever you want to insert objects into Core Data asynchronously. The method will take care
+    /// of creating and saving the data to the persistent store.
+    /// Due to this, so you should **only** use the context provided within the creation block as a parameter for
+    /// the NSManagedObject constructor. Any other use can lead to unexpected behavior.
+    ///
+    /// This call will be internally attached to a **private queue** and will be **asynchronous**. The provided
+    /// completion block will be executed within this same queue, so if you perform UI operations, remember to excute
+    /// them in the main thread.
+    ///
+    /// - Parameters:
+    ///   - block: A creation block where you must create the NSManagedObject subclasses to be inserted into Core Data.
+    ///   - context: An instance of an NSManagedObjectContext allowing you to create NSManagedObject subclasses.
+    ///   - completion: An instance of an NSManagedObjectContext allowing you to create NSManagedObject subclasses.
+    ///   - error: If operation fails, completion block will be called with this value set, being nil if succeeded.
+    ///
+    public func createObjectAsync(using block: @escaping (_ context:NSManagedObjectContext) -> () ,
+                                  completion: @escaping (_ error: Error?) -> () ){
+        guard setupWasCalled == true else{
+            completion(CoreDataManagerError.setupNotCalled)
             return
         }
         
-        print("CREATING IN CORE DATA")
         // Creates a task with a new background context created on the fly
         persistentContainer.performBackgroundTask { context in
             
             block(context)
-
-            do {
-                print("SAVING IN CORE DATA")
-                // Saves the entries created in the `forEach`
-                try context.save()
-                print("SAVED IN CORE DATA")
-                
-            } catch let saveError{
-                error(saveError)
-                fatalError("Failure to save context: \(saveError)")
+            
+            if context.hasChanges {
+                do {
+                    try context.save()
+                    
+                } catch {
+                    completion(error)
+                    return
+                }
             }
+            
+            completion(nil)
         }
         
     }
     
     // ------------------------------------------------------------
     // READ
-    /*
+    ///
     /// Synchronously executes a fetch request.
-    /// - Parameter request: The `NSFetchRequest` to use as an entity selector.
-    /// - Returns: An array containing the `NSManagedObject` list resulting from the fetch request.
-    public func fetchObjects(from request: NSFetchRequest<NSFetchRequestResult>) -> [NSManagedObject] {
+    ///
+    /// Use this method to fetch objects from Core Data using the main queue. This method is **blocking** so be
+    /// careful when using it, as it may block UI updates if it does not finish fast enough.
+    ///
+    /// Due to the call being internally attached to the main queue, calling this method from any other thread
+    /// will lead to crashes. This is standard Core Data behaviour as it's not thread safe.
+    ///
+    /// If you want a non blocking option, you must call `fetchObjectsAsync`.
+    ///
+    /// - Parameters:
+    ///   - request: The `NSFetchRequest` to use as an entity selector.
+    /// - Returns:
+    ///   `Result` object, containing an array with the fetched `NSManagedObject` instances or an `Error` if the operation failed.
+    ///
+    public func fetchObjects(using request: NSFetchRequest<NSFetchRequestResult>) -> Result<[NSManagedObject],Error> {
         do{
             guard let result = try mainContext.fetch(request) as? [NSManagedObject] else {
-                print("CoreDataManager ERROR Async Fetching: Result can't be casted to NSManagedObject")
-                return []
+                return .failure(CoreDataManagerError.castFailed)
             }
-            return result
+            return .success(result)
             
         }catch{
-            print("CoreDataManager ERROR Fetching: \(error)")
+            return .failure(error)
         }
-        
-        return []
     }
-    */
 
+    
+    ///
     /// Asynchronously executes a fetch request.
-    /// - Parameter request: The `NSFetchRequest` to use as an entity selector.
-    /// - Parameter completion: A completion block that will be called in the main thread, with the results assigned.
-    public func fetchObjectsAsync(from request: NSFetchRequest<NSFetchRequestResult>, completion: @escaping (_ result:[NSManagedObject]) -> Void){
+    ///
+    /// Use this method to fetch objects from Core Data aynchronously. This method is **non blocking** ,
+    /// so you must provide a completion block to get back the results.
+    ///
+    /// This call will be internally attached to a **private queue**. The provided completion block will
+    /// be executed automatically in the main queue, due to Core Data restrictions with multi-threading and NSManagedObject's
+    /// context.
+    ///
+    /// - Parameters:
+    ///   - request: The `NSFetchRequest` to use as an entity selector.
+    ///   - completion: A completion block that will be called in the main thread, having a `Result` object representing
+    ///   the operation's result.
+    ///
+    public func fetchObjectsAsync(using request: NSFetchRequest<NSFetchRequestResult>,
+                                  completion: @escaping (_ result:Result<[NSManagedObject],Error>) ->() ){
         guard setupWasCalled == true else{
-            print("CoreDataManager ERROR: Setup method wasn't called, persistentStores may not be loaded.")
+            completion( .failure(CoreDataManagerError.setupNotCalled) )
             return
         }
         
@@ -153,10 +242,9 @@ public final class CoreDataManager {
         let asynchronousFetchRequest = NSAsynchronousFetchRequest(fetchRequest: request) { asynchronousFetchResult in
  
             guard let result = asynchronousFetchResult.finalResult as? [NSManagedObject] else {
-                print("CoreDataManager ERROR Async Fetching: Result can't be casted to NSManagedObject")
-                return
+                return completion( .failure(CoreDataManagerError.castFailed) )
             }
-            print("THREAD ASYNCREQUEST: \(Thread.current)")
+            
             // We refetch objects from its ObjectID in the main queue
             DispatchQueue.main.async {
                 var objectList = [NSManagedObject]()
@@ -165,22 +253,64 @@ public final class CoreDataManager {
                     let queueSafeItem = self.mainContext.object(with: itemID)
                     objectList.append(queueSafeItem)
                 }
-                completion(objectList)
+                completion(.success(objectList))
             }
         }
-        print("THREAD: \(Thread.current)")
-        do {
-            try backgroundContext.execute(asynchronousFetchRequest)
-        } catch {
-            print("CoreDataManager ERROR Async Fetching: \(error)")
-        }
         
+        persistentContainer.performBackgroundTask { (context) in
+            do {
+               try context.execute(asynchronousFetchRequest)
+           } catch {
+               completion(.failure(error))
+           }
+        }
+
     }
+    
     
     // ------------------------------------------------------------
     // UPDATE
+    ///
+    /// Updates objects in Core Data.
+    ///
+    /// Use this method whenever you want to update objects from Core Data. The method will take care of saving
+    /// the data to the persistent store.
+    ///
+    /// This call will be internally attached to the main queue and will be **blocking**. Any use of an additional
+    /// queue when updating the NSManagedObject will lead to crashes. This is standard Core Data behaviour as it's
+    /// not thread safe.
+    ///
+    /// If you want a non blocking option, you must call `updateObjectAsync`
+    ///
+    /// - Parameters:
+    ///   - block: A block where you must modify the NSManagedObject subclasses to be updated in Core Data.
+    /// - Returns:
+    ///   An optional `Error` that will be nil if operation succeeds.
+    ///
+    public func updateObject(using block: @escaping () -> () ) -> Error?{
+        guard setupWasCalled == true else{
+            return CoreDataManagerError.setupNotCalled
+        }
+        
+        var operationError : Error?
+        
+        // Blocking!
+        mainContext.performAndWait {
+            block()
+            if mainContext.hasChanges {
+                do {
+                    try mainContext.save()
+                } catch {
+                    operationError = error
+                }
+            }
+        }
+        
+        return operationError
+    }
     
-    public func updateObjetsAsync(){
+    
+    public func updateObjectAsync(){
         guard setupWasCalled == true else{
             print("CoreDataManager ERROR: Setup method wasn't called, persistentStores may not be loaded.")
             return
@@ -224,10 +354,13 @@ public final class CoreDataManager {
     
     // ------------------------------------------------------------
     // DELETE
+    public func deleteObjects(using request: NSFetchRequest<NSFetchRequestResult>) -> Error? {
+        return nil
+    }
     
     /// Deletes all `NSManagedObject` entities selected by a `NSFetchRequest`.
     /// - Parameter request: The `NSFetchRequest` to use as an entity selector.
-    public func deleteObjects(from request:NSFetchRequest<NSFetchRequestResult>) {
+    public func deleteObjectsAsync(from request:NSFetchRequest<NSFetchRequestResult>) {
         guard setupWasCalled == true else{
             print("CoreDataManager ERROR: Setup method wasn't called, persistentStores may not be loaded.")
             return
@@ -277,19 +410,12 @@ Thread.sleep(forTimeInterval:3)
     /// - Parameter name: The `Entity` name to remove.
     /// - Returns: A boolean representing operation success.
     public func cleanMainContext(){
-        let context = self.persistentContainer.viewContext
-        for object in context.registeredObjects {
-            context.refresh(object, mergeChanges: false)
+        for object in mainContext.registeredObjects {
+            mainContext.refresh(object, mergeChanges: false)
         }
         
-        context.reset()
+        mainContext.reset()
     }
-    
-    public func saveContext(completion: @escaping () -> Void){
-        guard setupWasCalled == true else{
-            print("CoreDataManager ERROR: Setup method wasn't called, persistentStores may not be loaded.")
-            return
-        }
-    }
+
     
 }
