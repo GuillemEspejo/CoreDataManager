@@ -23,26 +23,31 @@ class ViewController: UIViewController {
         super.viewDidLoad()
         
         // Do any additional setup after loading the view.        
-        let completionBlock = {  (error: Error?) in
-            if let setupError = error {
-                print("SETUP ERROR!: \(setupError)")
-                return
+        let completionBlock = { (result: Result<Void,Error>) in
+            
+            switch result {
+                case .success():
+                    print("Core Data setup ended")
+                
+                case .failure(let error):
+                    print("SETUP ERROR!: \(error)")
             }
             
-            print("Core Data setup ended")
         }
-
-        stackManager.setup(withModel: "Test", completion: completionBlock )
+      
+        self.stackManager.setup(withModel:"Test",
+                                type: .inmemory ,
+                                completion: completionBlock )
+        
+        
 
     }
     
     @IBAction func didTapCreate(_ sender: Any) {
         
-       
-            
-            print("THREAD CREATION 1: \(Thread.current)")
+            //print("VIEW CONTROLLER 1: \(Thread.current)")
             let createBlock = { (context:NSManagedObjectContext) in
-                print("THREAD CREATION BLOCK 1: \(Thread.current)")
+             
                 
                 var taskNames = [String]()
                 for i in 0 ... 500000 {
@@ -57,23 +62,26 @@ class ViewController: UIViewController {
                     //print("CREATED TASK: \(task.title!)")
                 }
                 
-                print("THREAD CREATION BLOCK 2: \(Thread.current)")
             }
         
-            let completionBlock = { (error: Error?) in
-                if let setupError = error {
-                    print("CREATION ERROR!: \(setupError)")
-                    return
+            let completionBlock = { (result: Result<Void,Error>) in
+                print("Core Data creation ended on thread: \(Thread.current)")
+                
+                switch result {
+                    case .success():
+                        print("Core Data creation ended on thread: \(Thread.current)")
+                    
+                    case .failure(let error):
+                        print("CREATION ERROR!: \(error)")
                 }
                 
-                print("Core Data creation ended")
             }
 
          
-            print("THREAD CREATION 2: \(Thread.current)")
-            let error = self.stackManager.createObject(using:createBlock)
-            //self.stackManager.createObjectAsync(with:createBlock, completion: completionBlock)
-            print("THREAD CREATION 3: \(Thread.current)")
+            //print("VIEW CONTROLLER 2: \(Thread.current)")
+            //let error = self.stackManager.createObject(using:createBlock)
+            self.stackManager.createObjectAsync(using:createBlock, completion: completionBlock)
+            //print("VIEW CONTROLLER 3: \(Thread.current)")
         
         
         
@@ -93,8 +101,8 @@ class ViewController: UIViewController {
     }
     
     @IBAction func didTapFetch(_ sender: Any) {
-        
-        let fetchRequest: NSFetchRequest<NSFetchRequestResult> = TodoTask.fetchRequest()
+
+        let fetchRequest = NSFetchRequest<NSManagedObject>(entityName: "TodoTask")
         /*fetchRequest.predicate = ...
         fetchRequest.sortDescriptors = ... */
         
@@ -105,7 +113,7 @@ class ViewController: UIViewController {
                     case let .success(objects):
                        for task in objects {
                             let cast = task as? TodoTask
-                            
+                            print("TASK: \(cast!.title!)")
                        }
                         print("SUCCESSSSSSSSSS!!")
                      print("LOLER 2: \(Thread.current)")
@@ -115,7 +123,7 @@ class ViewController: UIViewController {
             }
             
             print("LOLER: \(Thread.current)")
-            self.stackManager.fetchObjectsAsync(using: fetchRequest,
+            self.stackManager.fetchObjectAsync(using: fetchRequest,
                                                 completion: completionBlock)
         
         

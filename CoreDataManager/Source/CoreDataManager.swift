@@ -12,12 +12,15 @@ import CoreData
 ///
 /// Todo
 ///
+///
 public final class CoreDataManager {
 
     public static let shared = CoreDataManager()
     
     private var setupWasCalled = false
     private var modelName : String!
+    
+    private var persistentContainerQueue : OperationQueue
 
     
     // ------------------------------------------------------------
@@ -25,14 +28,14 @@ public final class CoreDataManager {
     // ------------------------------------------------------------
     // MARK: - Properties
     lazy var persistentContainer: NSPersistentContainer! = {
-        let persistentContainer = NSPersistentContainer(name: self.modelName )
+        let persistentContainer = NSPersistentContainer(name: modelName )
         return persistentContainer
     }()
     
     /// An instance of `NSManagedObjectContext` that can be used for background operations.
     /// It's assigned automatically to a private background queue.
     public lazy var backgroundContext: NSManagedObjectContext = {
-        let context = self.persistentContainer.newBackgroundContext()
+        let context = persistentContainer.newBackgroundContext()
         context.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
         context.automaticallyMergesChangesFromParent = true
         return context
@@ -41,7 +44,7 @@ public final class CoreDataManager {
     /// An instance of `NSManagedObjectContext` that can be used for standard operations.
     /// It's assigned automatically to the main queue.
     public lazy var mainContext: NSManagedObjectContext = {
-        let context = self.persistentContainer.viewContext
+        let context = persistentContainer.viewContext
         context.shouldDeleteInaccessibleFaults = true
         context.automaticallyMergesChangesFromParent = true
         return context
@@ -53,15 +56,9 @@ public final class CoreDataManager {
     // ------------------------------------------------------------
     // MARK: - Init-Deinit
     private init(){
-        
-    }
-    
-    deinit{
-        do {
-            try self.mainContext.save()
-        } catch {
-            fatalError("CoreDataManager ERROR Deinit: \(error))")
-        }
+        persistentContainerQueue = OperationQueue()
+        persistentContainerQueue.maxConcurrentOperationCount = 1
+        persistentContainerQueue.name = "CoreDataManager Queue"
     }
     
     // ------------------------------------------------------------
@@ -77,27 +74,44 @@ public final class CoreDataManager {
     ///   - name: Core Data model filename.
     ///   - completion: A completion block that will be executed in the main thread whenever the setup finishes.
     ///   - error: If operation fails, completion block will be called with this value set, being nil if succeeded.
-    public func setup(withModel name:String, completion: @escaping (_ error: Error?) -> () ){
-        self.setupWasCalled = true
-        self.modelName = name
+    public func setup(withModel name:String,
+                      type: CoreDataManagerType ,
+                      completion: @escaping (_ result:Result<Void,Error>) ->() ){
+
+        setupWasCalled = true
+        modelName = name
         
-        guard Bundle.main.url(forResource: self.modelName, withExtension: "momd") != nil else{
-            completion(CoreDataManagerError.modelNotFound)
+        guard Bundle.main.url(forResource: modelName, withExtension: "momd") != nil else{
+            let error = CoreDataManagerError.modelNotFound(modelName)
+            completion( .failure(error) )
             return
         }
-
-        self.persistentContainer.loadPersistentStores { description, error in
-            completion(error)            
+    
+        let description = NSPersistentStoreDescription()
+        description.type = type.getString()
+        description.configuration = "Default"
+        persistentContainer.persistentStoreDescriptions = [description]
+        
+        persistentContainerQueue.addOperation {
+            self.persistentContainer.loadPersistentStores { description, error in
+                DispatchQueue.main.async {
+                    if let error = error {
+                        completion( .failure(error) )
+                    }else{
+                        completion( .success(()) )
+                    }
+                }
+            }
         }
+
     }
     
-    // ------------------------------------------------------------
-    // CRUD OPERATIONS
-    // ------------------------------------------------------------
-    // MARK: - CRUD Operations
+    
    
     // ------------------------------------------------------------
-    // CREATE
+    // CREATE OPERATIONS
+    // ------------------------------------------------------------
+    // MARK: - Create Operations
     ///
     /// Creates and inserts objects in Core Data.
     ///
@@ -117,9 +131,9 @@ public final class CoreDataManager {
     /// - Returns:
     ///   An optional `Error` that will be nil if operation succeeds.
     ///
-    public func createObject(using block: @escaping (_ context:NSManagedObjectContext) -> () ) -> Error?{
+    public func createObject(using block: @escaping (_ context:NSManagedObjectContext) -> () ) -> Result<Void,Error> {
         guard setupWasCalled == true else{
-            return CoreDataManagerError.setupNotCalled
+            return .failure( CoreDataManagerError.setupNotCalled )
         }
         
         var operationError : Error?
@@ -130,13 +144,18 @@ public final class CoreDataManager {
             if mainContext.hasChanges {
                 do {
                     try mainContext.save()
-                } catch {
-                    operationError = error
+                    
+                }catch{
+                    operationError = CoreDataManagerError.generic(error)
                 }
             }
         }
         
-        return operationError
+        if let finalError = operationError {
+            return .failure( finalError )
+        }else{
+            return .success(())
+        }
 
     }
         
@@ -159,12 +178,63 @@ public final class CoreDataManager {
     ///   - error: If operation fails, completion block will be called with this value set, being nil if succeeded.
     ///
     public func createObjectAsync(using block: @escaping (_ context:NSManagedObjectContext) -> () ,
-                                  completion: @escaping (_ error: Error?) -> () ){
-        guard setupWasCalled == true else{
-            completion(CoreDataManagerError.setupNotCalled)
-            return
-        }
+                                  completion: @escaping (_ result:Result<Void,Error>) ->() ){
         
+        persistentContainerQueue.addOperation(){
+            
+            guard self.setupWasCalled == true else{
+                DispatchQueue.main.async {
+                    completion( .failure(CoreDataManagerError.setupNotCalled) )
+                }
+                return
+            }
+            
+            let context = self.persistentContainer.newBackgroundContext()
+            context.performAndWait{
+                block(context)
+                 if context.hasChanges {
+                     do{
+                         try context.save()
+                     }catch{
+                        DispatchQueue.main.async{
+                            completion( .failure(CoreDataManagerError.generic(error)) )
+                        }
+                        return
+                     }
+                 }
+
+                 DispatchQueue.main.async {
+                    completion( .success(()) )
+                 }
+            }
+        }
+
+        
+        /*
+        DispatchQueue.global().async {
+            print("WILL START CREATE ASYNC")
+            self.backgroundContext.performAndWait {
+            
+                 print("PERFORMING")
+                 block(self.backgroundContext)
+                 
+                 if self.backgroundContext.hasChanges {
+                     do {
+                         try self.backgroundContext.save()
+                         
+                     } catch {
+                         completion( CoreDataManagerError.generic(error) )
+                         return
+                     }
+                 }
+                 print("WILL CALL COMPLETION")
+                 completion(nil)
+             }
+             print("WILL RETURN FROM CREATE ASYNC")
+        }
+        */
+        
+        /*
         // Creates a task with a new background context created on the fly
         persistentContainer.performBackgroundTask { context in
             
@@ -175,18 +245,21 @@ public final class CoreDataManager {
                     try context.save()
                     
                 } catch {
-                    completion(error)
+                    completion( CoreDataManagerError.generic(error) )
                     return
                 }
             }
             
             completion(nil)
         }
+ */
         
     }
     
     // ------------------------------------------------------------
-    // READ
+    // READ OPERATIONS
+    // ------------------------------------------------------------
+    // MARK: - Read Operations
     ///
     /// Synchronously executes a fetch request.
     ///
@@ -203,15 +276,19 @@ public final class CoreDataManager {
     /// - Returns:
     ///   `Result` object, containing an array with the fetched `NSManagedObject` instances or an `Error` if the operation failed.
     ///
-    public func fetchObjects(using request: NSFetchRequest<NSFetchRequestResult>) -> Result<[NSManagedObject],Error> {
+    public func fetchObject(using request: NSFetchRequest<NSManagedObject>) -> Result<[NSManagedObject],Error> {
+        guard setupWasCalled == true else{
+            return .failure( CoreDataManagerError.setupNotCalled )
+        }
+        
         do{
             guard let result = try mainContext.fetch(request) as? [NSManagedObject] else {
-                return .failure(CoreDataManagerError.castFailed)
+                return .failure( CoreDataManagerError.castFailed )
             }
             return .success(result)
             
         }catch{
-            return .failure(error)
+            return .failure( CoreDataManagerError.generic(error) )
         }
     }
 
@@ -231,8 +308,8 @@ public final class CoreDataManager {
     ///   - completion: A completion block that will be called in the main thread, having a `Result` object representing
     ///   the operation's result.
     ///
-    public func fetchObjectsAsync(using request: NSFetchRequest<NSFetchRequestResult>,
-                                  completion: @escaping (_ result:Result<[NSManagedObject],Error>) ->() ){
+    public func fetchObjectAsync(using request: NSFetchRequest<NSManagedObject>,
+                                 completion: @escaping (_ result:Result<[NSManagedObject],Error>) ->() ){
         guard setupWasCalled == true else{
             completion( .failure(CoreDataManagerError.setupNotCalled) )
             return
@@ -253,23 +330,33 @@ public final class CoreDataManager {
                     let queueSafeItem = self.mainContext.object(with: itemID)
                     objectList.append(queueSafeItem)
                 }
-                completion(.success(objectList))
+                completion( .success(objectList) )
             }
         }
         
+        backgroundContext.perform {
+            do {
+                try self.backgroundContext.execute(asynchronousFetchRequest)
+            } catch {
+                completion( .failure(CoreDataManagerError.generic(error)) )
+            }
+        }
+        /*
         persistentContainer.performBackgroundTask { (context) in
             do {
                try context.execute(asynchronousFetchRequest)
            } catch {
-               completion(.failure(error))
+               completion( .failure(CoreDataManagerError.generic(error)) )
            }
         }
-
+*/
     }
     
     
     // ------------------------------------------------------------
-    // UPDATE
+    // UPDATE OPERATIONS
+    // ------------------------------------------------------------
+    // MARK: - Update Operations
     ///
     /// Updates objects in Core Data.
     ///
@@ -300,8 +387,9 @@ public final class CoreDataManager {
             if mainContext.hasChanges {
                 do {
                     try mainContext.save()
-                } catch {
-                    operationError = error
+                    
+                }catch{
+                    operationError = CoreDataManagerError.generic(error)
                 }
             }
         }
@@ -310,9 +398,11 @@ public final class CoreDataManager {
     }
     
     
-    public func updateObjectAsync(){
+    public func updateObjectAsync(using block: @escaping (_ context:NSManagedObjectContext) -> () ,
+                                  completion: @escaping (_ error: Error?) -> () ){
+        
         guard setupWasCalled == true else{
-            print("CoreDataManager ERROR: Setup method wasn't called, persistentStores may not be loaded.")
+            completion( CoreDataManagerError.setupNotCalled )
             return
         }
         
@@ -336,7 +426,7 @@ public final class CoreDataManager {
 
                 // Retrieves the IDs deleted
                 guard let objectIDs = result?.result as? [NSManagedObjectID] else {
-                    print("CoreDataManager ERROR Removing: Objects retreived are not IDs")
+                    completion( CoreDataManagerError.castFailed )
                     return
                 }
 
@@ -345,24 +435,95 @@ public final class CoreDataManager {
                 NSManagedObjectContext.mergeChanges(fromRemoteContextSave: changes, into: [self.mainContext])
                 
             } catch {
-                fatalError("Failed to execute request: \(error)")
+                completion( CoreDataManagerError.generic(error) )
             }
         }
     }
-    
-    
+
     
     // ------------------------------------------------------------
-    // DELETE
-    public func deleteObjects(using request: NSFetchRequest<NSFetchRequestResult>) -> Error? {
-        return nil
+    // DELETE OPERATIONS
+    // ------------------------------------------------------------
+    // MARK: - Delete Operations
+    public func deleteObject(using request: NSFetchRequest<NSManagedObject>) -> Error? {
+        guard setupWasCalled == true else{
+            return CoreDataManagerError.setupNotCalled
+        }
+        
+        var finalError : CoreDataManagerError?
+        mainContext.performAndWait {
+            do {
+                let objects = try mainContext.fetch(request)
+                for object in objects {
+                    mainContext.delete(object)
+                }
+                
+                try mainContext.save()
+                
+            } catch {
+                finalError = CoreDataManagerError.generic(error)
+            }
+        }
+        
+        return finalError
     }
-    
+
+
+
     /// Deletes all `NSManagedObject` entities selected by a `NSFetchRequest`.
     /// - Parameter request: The `NSFetchRequest` to use as an entity selector.
-    public func deleteObjectsAsync(from request:NSFetchRequest<NSFetchRequestResult>) {
+    public func deleteObjectAsync(from request:NSFetchRequest<NSManagedObject>,
+                                  completion: @escaping (_ error: Error?) -> () ){
+        
         guard setupWasCalled == true else{
-            print("CoreDataManager ERROR: Setup method wasn't called, persistentStores may not be loaded.")
+            completion( CoreDataManagerError.setupNotCalled )
+            return
+        }
+        
+        backgroundContext.performAndWait {
+            
+            do {
+                let objects = try self.backgroundContext.fetch(request)
+                for object in objects {
+                    self.backgroundContext.delete(object)
+                }
+                
+                try self.backgroundContext.save()
+                
+                DispatchQueue.main.async {
+                    completion(nil)
+                }
+                
+            } catch {
+                DispatchQueue.main.async {
+                    completion( CoreDataManagerError.generic(error) )
+                }
+            }
+
+        }
+
+            
+    }
+    
+    
+    func enqueue(block: @escaping (_ context: NSManagedObjectContext) -> Void) {
+      persistentContainerQueue.addOperation(){
+        let context = self.backgroundContext//: NSManagedObjectContext = self.persistentContainer.newBackgroundContext()
+          context.performAndWait{
+            block(context)
+          }
+        }
+    }
+
+
+
+/*
+    /// Deletes all `NSManagedObject` entities selected by a `NSFetchRequest`.
+    /// - Parameter request: The `NSFetchRequest` to use as an entity selector.
+    public func deleteObjectAsync(from request:NSFetchRequest<NSManagedObject>,
+                                  completion: @escaping (_ error: Error?) -> () ){
+        guard setupWasCalled == true else{
+            completion( CoreDataManagerError.setupNotCalled )
             return
         }
         
@@ -370,35 +531,37 @@ public final class CoreDataManager {
         
         persistentContainer.performBackgroundTask { privateManagedObjectContext in
             print("PERFORMING IN BGR 1")
-            // Creates new batch delete request with a specific request
-            let deleteRequest = NSBatchDeleteRequest(fetchRequest: request)
 
+            let deleteRequest = NSBatchDeleteRequest(fetchRequest: request)
             // Asks to return the objectIDs deleted
             deleteRequest.resultType = .resultTypeObjectIDs
 
-            do {
-                
+            do {                
                 print("PERFORMING IN BGR 2")
                 // Executes batch
                 let result = try privateManagedObjectContext.execute(deleteRequest) as? NSBatchDeleteResult
 
                 // Retrieves the IDs deleted
                 guard let objectIDs = result?.result as? [NSManagedObjectID] else {
-                    print("CoreDataManager ERROR Removing: Objects retreived are not IDs")
+                    completion( CoreDataManagerError.notIds )
                     return
                 }
-Thread.sleep(forTimeInterval:3)
+                Thread.sleep(forTimeInterval:3)
                 // Updates the main context
                 let changes = [NSDeletedObjectsKey: objectIDs]
                 NSManagedObjectContext.mergeChanges(fromRemoteContextSave: changes, into: [self.mainContext])
                 print("PERFORMING IN BGR 3")
+                completion(nil)
+
             } catch {
-                print("CoreDataManager ERROR Removing: \(error)")
+                completion( CoreDataManagerError.generic(error) )
             }
         }
         
     }
+ */
     
+/*
     // ------------------------------------------------------------
     // MISC
     // ------------------------------------------------------------
@@ -407,8 +570,6 @@ Thread.sleep(forTimeInterval:3)
     /// Cleans main context, refreshing all loaded objects from Core Data and reseting the context. This allows to remove
     /// current in-memory unused `NSManagedObject`. Useful after importing or creating large ammounts of data.
     ///
-    /// - Parameter name: The `Entity` name to remove.
-    /// - Returns: A boolean representing operation success.
     public func cleanMainContext(){
         for object in mainContext.registeredObjects {
             mainContext.refresh(object, mergeChanges: false)
@@ -416,6 +577,6 @@ Thread.sleep(forTimeInterval:3)
         
         mainContext.reset()
     }
-
+*/
     
 }

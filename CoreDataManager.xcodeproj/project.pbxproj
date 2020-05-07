@@ -9,7 +9,7 @@
 /* Begin PBXBuildFile section */
 		3D54801024278B7D0038888B /* CoreDataManager.h in Headers */ = {isa = PBXBuildFile; fileRef = 3D54800E24278B7D0038888B /* CoreDataManager.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		3D54801824278E520038888B /* CoreDataManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D54801724278E520038888B /* CoreDataManager.swift */; };
-		3DB06540244B4FA400301200 /* CoreDataManagerError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DB0653F244B4FA400301200 /* CoreDataManagerError.swift */; };
+		3DB06540244B4FA400301200 /* CoreDataManagerUtils.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DB0653F244B4FA400301200 /* CoreDataManagerUtils.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -17,7 +17,7 @@
 		3D54800E24278B7D0038888B /* CoreDataManager.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CoreDataManager.h; sourceTree = "<group>"; };
 		3D54800F24278B7D0038888B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		3D54801724278E520038888B /* CoreDataManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreDataManager.swift; sourceTree = "<group>"; };
-		3DB0653F244B4FA400301200 /* CoreDataManagerError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreDataManagerError.swift; sourceTree = "<group>"; };
+		3DB0653F244B4FA400301200 /* CoreDataManagerUtils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreDataManagerUtils.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -61,7 +61,7 @@
 			isa = PBXGroup;
 			children = (
 				3D54801724278E520038888B /* CoreDataManager.swift */,
-				3DB0653F244B4FA400301200 /* CoreDataManagerError.swift */,
+				3DB0653F244B4FA400301200 /* CoreDataManagerUtils.swift */,
 			);
 			path = Source;
 			sourceTree = "<group>";
@@ -146,7 +146,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				3DB06540244B4FA400301200 /* CoreDataManagerError.swift in Sources */,
+				3DB06540244B4FA400301200 /* CoreDataManagerUtils.swift in Sources */,
 				3D54801824278E520038888B /* CoreDataManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
