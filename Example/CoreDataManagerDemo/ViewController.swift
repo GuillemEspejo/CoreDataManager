@@ -11,20 +11,40 @@ import CoreDataManager
 import CoreData
 
 class ViewController: UIViewController {
-
     @IBOutlet weak var labelResults: UILabel!
-    @IBOutlet weak var btnFetch: UIButton!
-    @IBOutlet weak var btnDelete: UIButton!
-    @IBOutlet weak var btnCreate: UIButton!
-    
+    @IBOutlet weak var labelWorking: UILabel!
+
     private var stackManager = CoreDataManager.shared
+    private static let objectLimit = 250
+    private static var fetchedObjects = [TodoTask]()
     
+    // Block used when inserting objects
+    private let createBlock = { (context:NSManagedObjectContext) in
+        for i in 1 ... ViewController.objectLimit {
+            let task = TodoTask(context: context)
+            task.title = "Task \(i)"
+            task.done = false
+        }
+        Thread.sleep(forTimeInterval: 1.5)
+    }
+    
+    // Block used when updating objects
+    private let updateBlock = {
+        for task in fetchedObjects{
+            task.done = true
+        }
+        Thread.sleep(forTimeInterval: 1.5)
+    }
+    
+    // ------------------------------------------------------------
+    // LIFECYCLE
+    // ------------------------------------------------------------
+    // MARK: - Lifecycle
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        // Do any additional setup after loading the view.        
+        // Completion block when setup succeeds
         let completionBlock = { (result: Result<Void,Error>) in
-            
             switch result {
                 case .success():
                     print("Core Data setup ended")
@@ -32,119 +52,187 @@ class ViewController: UIViewController {
                 case .failure(let error):
                     print("SETUP ERROR!: \(error)")
             }
-            
         }
       
+        // Stack async setup
         self.stackManager.setup(withModel:"Test",
                                 type: .inmemory ,
                                 completion: completionBlock )
-        
-        
 
     }
     
+    // ------------------------------------------------------------
+    // CREATION
+    // ------------------------------------------------------------
+    // MARK: - Creation
     @IBAction func didTapCreate(_ sender: Any) {
+        self.labelResults.text = "Awaiting results..."
         
-            //print("VIEW CONTROLLER 1: \(Thread.current)")
-            let createBlock = { (context:NSManagedObjectContext) in
-             
-                
-                var taskNames = [String]()
-                for i in 0 ... 500000 {
-                    taskNames.append("Task \(i)")
-                }
-                
-                
-                for taskname in taskNames{
-                    let task = TodoTask(context: context)
-                    task.title = taskname
-                    task.done = true
-                    //print("CREATED TASK: \(task.title!)")
-                }
-                
-            }
+        let result = self.stackManager.createObject(using:createBlock)
+        switch result {
+            case .success:
+                self.labelResults.text = "Created \(ViewController.objectLimit) 'Todo' tasks"
+            
+            case .failure(let error):
+                self.labelResults.text = error.localizedDescription
+        }
         
-            let completionBlock = { (result: Result<Void,Error>) in
-                print("Core Data creation ended on thread: \(Thread.current)")
-                
-                switch result {
-                    case .success():
-                        print("Core Data creation ended on thread: \(Thread.current)")
-                    
-                    case .failure(let error):
-                        print("CREATION ERROR!: \(error)")
-                }
-                
-            }
-
-         
-            //print("VIEW CONTROLLER 2: \(Thread.current)")
-            //let error = self.stackManager.createObject(using:createBlock)
-            self.stackManager.createObjectAsync(using:createBlock, completion: completionBlock)
-            //print("VIEW CONTROLLER 3: \(Thread.current)")
-        
-        
-        
-        
+        synchronicityLoop()
     }
     
-    @IBAction func didTapDelete(_ sender: Any) {
-   /*
-        let fetchRequest: NSFetchRequest<NSFetchRequestResult> = TodoTask.fetchRequest()
-        /*fetchRequest.predicate = ...
-        fetchRequest.sortDescriptors = ... */
+    @IBAction func didTapCreateAsync(_ sender: Any) {
+        self.labelResults.text = "Awaiting results..."
         
-        stackManager.deleteObjects(from:fetchRequest)
-        */
-        print("TAP TAP TAP")
-
+        let completionBlock = { (result: Result<Void,Error>) in
+            switch result {
+                case .success:
+                    self.labelResults.text = "Created \(ViewController.objectLimit) 'Todo' tasks"
+                
+                case .failure(let error):
+                    self.labelResults.text = error.localizedDescription
+            }
+        }
+        
+        self.stackManager.createObjectAsync(using:createBlock, completion: completionBlock)
+        synchronicityLoop()
     }
     
+    // ------------------------------------------------------------
+    // FETCHING
+    // ------------------------------------------------------------
+    // MARK: - Fetching
     @IBAction func didTapFetch(_ sender: Any) {
+        self.labelResults.text = "Awaiting results..."
+        
+        let fetchRequest = NSFetchRequest<NSManagedObject>(entityName: "TodoTask")
+        let result = self.stackManager.fetchObject(using: fetchRequest)
+    
+        switch result {
+            case let .success(objects):
+                self.labelResults.text = "Fetched \(objects.count) 'Todo' tasks"
+                let castedObjects = objects.map { (object) -> TodoTask in
+                    return object as! TodoTask
+                }
+                ViewController.fetchedObjects.removeAll()
+                ViewController.fetchedObjects.append(contentsOf: castedObjects)
+            
+            case .failure(let error):
+                self.labelResults.text = error.localizedDescription
+        }
+        
+        synchronicityLoop()
+        
+    }
+    
+    @IBAction func didTapFetchAsync(_ sender: Any) {
+        self.labelResults.text = "Awaiting results..."
 
         let fetchRequest = NSFetchRequest<NSManagedObject>(entityName: "TodoTask")
-        /*fetchRequest.predicate = ...
-        fetchRequest.sortDescriptors = ... */
         
-        
-
-            let completionBlock = { (result : Result<[NSManagedObject],Error>) in
-                switch result {
-                    case let .success(objects):
-                       for task in objects {
-                            let cast = task as? TodoTask
-                            print("TASK: \(cast!.title!)")
-                       }
-                        print("SUCCESSSSSSSSSS!!")
-                     print("LOLER 2: \(Thread.current)")
-                    case let .failure(error):
-                        print("THERE WAS AN ERROR FETCHING: \(error)")
-                }
-            }
-            
-            print("LOLER: \(Thread.current)")
-            self.stackManager.fetchObjectAsync(using: fetchRequest,
-                                                completion: completionBlock)
-        
-        
-/*
-            let result = self.stackManager.fetchObjects(from: fetchRequest)
-            
+        let completionBlock = { (result : Result<[NSManagedObject],Error>) in
             switch result {
                 case let .success(objects):
+                    self.labelResults.text = "Fetched \(objects.count) 'Todo' tasks"
+                    let castedObjects = objects.map { (object) -> TodoTask in
+                        return object as! TodoTask
+                    }
+                    ViewController.fetchedObjects.removeAll()
+                    ViewController.fetchedObjects.append(contentsOf: castedObjects)
                 
-                        for task in objects {
-                            let cast = task as? TodoTask
-                        }
-                    
-                   
-                    print("SUCCESSSSSSSSSS!!")
-                case let .failure(error):
-                    print("THERE WAS AN ERROR FETCHING: \(error)")
+                case .failure(let error):
+                    self.labelResults.text = error.localizedDescription
             }
-  */
+        }
+            
+        self.stackManager.fetchObjectAsync(using: fetchRequest, completion: completionBlock)
+        synchronicityLoop()
+    }
+    
+    // ------------------------------------------------------------
+    // UPDATE
+    // ------------------------------------------------------------
+    // MARK: - Update
+    @IBAction func didTapUpdate(_ sender: Any) {
+        self.labelResults.text = "Awaiting results..."
         
+        guard ViewController.fetchedObjects.count != 0 else{
+            self.labelResults.text = "No objects to update, run Fetch first."
+            return
+        }
+        
+        let updateResult = stackManager.updateObject(using: updateBlock)
+        
+        switch updateResult {
+            case .success():
+                self.labelResults.text = "Updated \(ViewController.fetchedObjects.count) 'Todo' tasks"
+            
+            case .failure(let error):
+                self.labelResults.text = error.localizedDescription
+        }
+        synchronicityLoop()
+    }
+    
+    // No async update available
+    
+    
+    // ------------------------------------------------------------
+    // DELETE
+    // ------------------------------------------------------------
+    // MARK: - Delete
+    @IBAction func didTapDelete(_ sender: Any) {
+        self.labelResults.text = "Awaiting results..."
 
+        let fetchRequest = NSFetchRequest<NSManagedObject>(entityName: "TodoTask")
+        let result = stackManager.deleteObject(using: fetchRequest)
+        
+        switch result {
+            case .success(let deletedCount):
+                self.labelResults.text = "Deleted \(deletedCount) 'Todo' tasks"
+            case .failure(let error):
+                self.labelResults.text = error.localizedDescription
+        }
+        
+        synchronicityLoop()
+    }
+    
+    @IBAction func didTapDeleteAsync(_ sender: Any) {
+        self.labelResults.text = "Awaiting results..."
+
+        let fetchRequest = NSFetchRequest<NSManagedObject>(entityName: "TodoTask")
+        
+        let completionBlock = { (result : Result<Int,Error>) in
+            switch result {
+                case let .success(objectCount):
+                    self.labelResults.text = "Deleted \(objectCount) 'Todo' tasks"
+                
+                case .failure(let error):
+                    self.labelResults.text = error.localizedDescription
+            }
+        }
+            
+        self.stackManager.deleteObjectAsync(from: fetchRequest, completion: completionBlock)
+        synchronicityLoop()
+    }
+
+
+    // ------------------------------------------------------------
+    // PRIVATE MISC
+    // ------------------------------------------------------------
+    // MARK: - Private misc
+    // Simulates some working, updates the UI on the main thread
+    private func synchronicityLoop(){
+        DispatchQueue.global().async {
+            for number in 0...3{
+                DispatchQueue.main.async {
+                    self.labelWorking.text = "Running loop... \(number)"
+                }
+                Thread.sleep(forTimeInterval: 1)
+            }
+            
+            DispatchQueue.main.async {
+                self.labelWorking.text = "Loop ended"
+            }
+        }
     }
     
 }

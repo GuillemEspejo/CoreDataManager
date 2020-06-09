@@ -189,12 +189,12 @@ public final class CoreDataManager {
                 return
             }
             
-            let context = self.persistentContainer.newBackgroundContext()
-            context.performAndWait{
-                block(context)
-                 if context.hasChanges {
+            self.backgroundContext.performAndWait{
+                block(self.backgroundContext)
+                
+                if self.backgroundContext.hasChanges {
                      do{
-                         try context.save()
+                        try self.backgroundContext.save()
                      }catch{
                         DispatchQueue.main.async{
                             completion( .failure(CoreDataManagerError.generic(error)) )
@@ -208,51 +208,6 @@ public final class CoreDataManager {
                  }
             }
         }
-
-        
-        /*
-        DispatchQueue.global().async {
-            print("WILL START CREATE ASYNC")
-            self.backgroundContext.performAndWait {
-            
-                 print("PERFORMING")
-                 block(self.backgroundContext)
-                 
-                 if self.backgroundContext.hasChanges {
-                     do {
-                         try self.backgroundContext.save()
-                         
-                     } catch {
-                         completion( CoreDataManagerError.generic(error) )
-                         return
-                     }
-                 }
-                 print("WILL CALL COMPLETION")
-                 completion(nil)
-             }
-             print("WILL RETURN FROM CREATE ASYNC")
-        }
-        */
-        
-        /*
-        // Creates a task with a new background context created on the fly
-        persistentContainer.performBackgroundTask { context in
-            
-            block(context)
-            
-            if context.hasChanges {
-                do {
-                    try context.save()
-                    
-                } catch {
-                    completion( CoreDataManagerError.generic(error) )
-                    return
-                }
-            }
-            
-            completion(nil)
-        }
- */
         
     }
     
@@ -281,15 +236,18 @@ public final class CoreDataManager {
             return .failure( CoreDataManagerError.setupNotCalled )
         }
         
-        do{
-            guard let result = try mainContext.fetch(request) as? [NSManagedObject] else {
-                return .failure( CoreDataManagerError.castFailed )
+        var result : Result<[NSManagedObject],Error>!
+        mainContext.performAndWait {
+            do{
+                let fetchResults = try mainContext.fetch(request)
+                result = .success(fetchResults)
+                
+            }catch{
+                result = .failure( CoreDataManagerError.generic(error) )
             }
-            return .success(result)
-            
-        }catch{
-            return .failure( CoreDataManagerError.generic(error) )
         }
+        
+        return result
     }
 
     
@@ -310,46 +268,50 @@ public final class CoreDataManager {
     ///
     public func fetchObjectAsync(using request: NSFetchRequest<NSManagedObject>,
                                  completion: @escaping (_ result:Result<[NSManagedObject],Error>) ->() ){
-        guard setupWasCalled == true else{
-            completion( .failure(CoreDataManagerError.setupNotCalled) )
-            return
-        }
         
-        // Creates `asynchronousFetchRequest` with the fetch request and the completion closure
-        let asynchronousFetchRequest = NSAsynchronousFetchRequest(fetchRequest: request) { asynchronousFetchResult in
- 
-            guard let result = asynchronousFetchResult.finalResult as? [NSManagedObject] else {
-                return completion( .failure(CoreDataManagerError.castFailed) )
-            }
+        persistentContainerQueue.addOperation(){
             
-            // We refetch objects from its ObjectID in the main queue
-            DispatchQueue.main.async {
-                var objectList = [NSManagedObject]()
-                for item in result {
-                    let itemID = item.objectID
-                    let queueSafeItem = self.mainContext.object(with: itemID)
-                    objectList.append(queueSafeItem)
+            guard self.setupWasCalled == true else{
+                DispatchQueue.main.async {
+                    completion( .failure(CoreDataManagerError.setupNotCalled) )
                 }
-                completion( .success(objectList) )
+                return
+            }
+                   
+           // Background async fetch request block
+           let backgroundAsyncRequest = NSAsynchronousFetchRequest(fetchRequest: request) { asynchronousFetchResult in
+                guard let result = asynchronousFetchResult.finalResult else {
+                    DispatchQueue.main.async {
+                        completion( .failure(CoreDataManagerError.nilFetch) )
+                    }
+                    return
+                }
+               
+                // We refetch objects from its ObjectID in the main queue
+                DispatchQueue.main.async {
+                    var objectList = [NSManagedObject]()
+                    for item in result {
+                        let itemID = item.objectID
+                        let queueSafeItem = self.mainContext.object(with: itemID)
+                        objectList.append(queueSafeItem)
+                    }
+                    completion( .success(objectList) )
+                }
+            }
+                
+            // Fetch execution
+            self.backgroundContext.performAndWait {
+                do {
+                    try self.backgroundContext.execute(backgroundAsyncRequest)
+                    
+                } catch {
+                    DispatchQueue.main.async {
+                        completion( .failure(CoreDataManagerError.generic(error)) )
+                    }
+                }
             }
         }
         
-        backgroundContext.perform {
-            do {
-                try self.backgroundContext.execute(asynchronousFetchRequest)
-            } catch {
-                completion( .failure(CoreDataManagerError.generic(error)) )
-            }
-        }
-        /*
-        persistentContainer.performBackgroundTask { (context) in
-            do {
-               try context.execute(asynchronousFetchRequest)
-           } catch {
-               completion( .failure(CoreDataManagerError.generic(error)) )
-           }
-        }
-*/
     }
     
     
@@ -374,9 +336,9 @@ public final class CoreDataManager {
     /// - Returns:
     ///   An optional `Error` that will be nil if operation succeeds.
     ///
-    public func updateObject(using block: @escaping () -> () ) -> Error?{
+    public func updateObject(using block: @escaping () -> () ) -> Result<Void,Error> {
         guard setupWasCalled == true else{
-            return CoreDataManagerError.setupNotCalled
+            return .failure( CoreDataManagerError.setupNotCalled )
         }
         
         var operationError : Error?
@@ -394,189 +356,90 @@ public final class CoreDataManager {
             }
         }
         
-        return operationError
-    }
-    
-    
-    public func updateObjectAsync(using block: @escaping (_ context:NSManagedObjectContext) -> () ,
-                                  completion: @escaping (_ error: Error?) -> () ){
-        
-        guard setupWasCalled == true else{
-            completion( CoreDataManagerError.setupNotCalled )
-            return
-        }
-        
-        persistentContainer.performBackgroundTask { privateManagedObjectContext in
-            // Creates new batch update request for entity `Dog`
-            let updateRequest = NSBatchUpdateRequest(entityName: "TodoTask")
-            // All the dogs with `isFavorite` true
-            let predicate = NSPredicate(format: "done == true")
-            // Assigns the predicate to the batch update
-            updateRequest.predicate = predicate
-
-            // Dictionary with the property names to update as keys and the new values as values
-            updateRequest.propertiesToUpdate = ["isFavorite": false]
-
-            // Sets the result type as array of object IDs updated
-            updateRequest.resultType = .updatedObjectIDsResultType
-
-            do {
-                // Executes batch
-                let result = try privateManagedObjectContext.execute(updateRequest) as? NSBatchUpdateResult
-
-                // Retrieves the IDs deleted
-                guard let objectIDs = result?.result as? [NSManagedObjectID] else {
-                    completion( CoreDataManagerError.castFailed )
-                    return
-                }
-
-                // Updates the main context
-                let changes = [NSUpdatedObjectsKey: objectIDs]
-                NSManagedObjectContext.mergeChanges(fromRemoteContextSave: changes, into: [self.mainContext])
-                
-            } catch {
-                completion( CoreDataManagerError.generic(error) )
-            }
+        if let finalError = operationError {
+            return .failure( finalError )
+        }else{
+            return .success(())
         }
     }
-
+    
+    // No update async available due to threading issues
     
     // ------------------------------------------------------------
     // DELETE OPERATIONS
     // ------------------------------------------------------------
     // MARK: - Delete Operations
-    public func deleteObject(using request: NSFetchRequest<NSManagedObject>) -> Error? {
+    /// Deletes all `NSManagedObject` entities selected by a `NSFetchRequest`.
+    /// - Parameter request: The `NSFetchRequest` to use as an entity selector.
+    public func deleteObject(using request: NSFetchRequest<NSManagedObject>) -> Result<Int,Error> {
         guard setupWasCalled == true else{
-            return CoreDataManagerError.setupNotCalled
+            return .failure( CoreDataManagerError.setupNotCalled )
         }
         
-        var finalError : CoreDataManagerError?
+        var operationError : CoreDataManagerError?
+        var deletedCount = 0
         mainContext.performAndWait {
             do {
                 let objects = try mainContext.fetch(request)
                 for object in objects {
                     mainContext.delete(object)
+                    deletedCount += 1
                 }
                 
-                try mainContext.save()
+                if mainContext.hasChanges {
+                    try mainContext.save()
+                }
                 
             } catch {
-                finalError = CoreDataManagerError.generic(error)
+                operationError = CoreDataManagerError.generic(error)
             }
         }
         
-        return finalError
+        if let finalError = operationError {
+            return .failure( finalError )
+        }else{
+            return .success(deletedCount)
+        }
     }
-
 
 
     /// Deletes all `NSManagedObject` entities selected by a `NSFetchRequest`.
     /// - Parameter request: The `NSFetchRequest` to use as an entity selector.
     public func deleteObjectAsync(from request:NSFetchRequest<NSManagedObject>,
-                                  completion: @escaping (_ error: Error?) -> () ){
-        
-        guard setupWasCalled == true else{
-            completion( CoreDataManagerError.setupNotCalled )
-            return
-        }
-        
-        backgroundContext.performAndWait {
+                                  completion: @escaping (_ result:Result<Int,Error>) ->() ){
+        persistentContainerQueue.addOperation(){
             
-            do {
-                let objects = try self.backgroundContext.fetch(request)
-                for object in objects {
-                    self.backgroundContext.delete(object)
-                }
-                
-                try self.backgroundContext.save()
-                
+            guard self.setupWasCalled == true else{
                 DispatchQueue.main.async {
-                    completion(nil)
+                    completion( .failure(CoreDataManagerError.setupNotCalled) )
                 }
-                
-            } catch {
-                DispatchQueue.main.async {
-                    completion( CoreDataManagerError.generic(error) )
+                return
+            }
+            
+            self.backgroundContext.performAndWait {
+                do {
+                    var deletedCount = 0
+                    let objects = try self.backgroundContext.fetch(request)
+                    for object in objects {
+                        self.backgroundContext.delete(object)
+                        deletedCount += 1
+                    }
+                    
+                    if self.backgroundContext.hasChanges {
+                        try self.backgroundContext.save()
+                    }
+                    
+                    DispatchQueue.main.async {
+                        completion( .success(deletedCount) )
+                    }
+                    
+                } catch {
+                    DispatchQueue.main.async {
+                        completion( .failure(CoreDataManagerError.generic(error)) )
+                    }
                 }
             }
-
-        }
-
-            
-    }
-    
-    
-    func enqueue(block: @escaping (_ context: NSManagedObjectContext) -> Void) {
-      persistentContainerQueue.addOperation(){
-        let context = self.backgroundContext//: NSManagedObjectContext = self.persistentContainer.newBackgroundContext()
-          context.performAndWait{
-            block(context)
-          }
         }
     }
-
-
-
-/*
-    /// Deletes all `NSManagedObject` entities selected by a `NSFetchRequest`.
-    /// - Parameter request: The `NSFetchRequest` to use as an entity selector.
-    public func deleteObjectAsync(from request:NSFetchRequest<NSManagedObject>,
-                                  completion: @escaping (_ error: Error?) -> () ){
-        guard setupWasCalled == true else{
-            completion( CoreDataManagerError.setupNotCalled )
-            return
-        }
-        
-        print("DELETING OBJECTS")
-        
-        persistentContainer.performBackgroundTask { privateManagedObjectContext in
-            print("PERFORMING IN BGR 1")
-
-            let deleteRequest = NSBatchDeleteRequest(fetchRequest: request)
-            // Asks to return the objectIDs deleted
-            deleteRequest.resultType = .resultTypeObjectIDs
-
-            do {                
-                print("PERFORMING IN BGR 2")
-                // Executes batch
-                let result = try privateManagedObjectContext.execute(deleteRequest) as? NSBatchDeleteResult
-
-                // Retrieves the IDs deleted
-                guard let objectIDs = result?.result as? [NSManagedObjectID] else {
-                    completion( CoreDataManagerError.notIds )
-                    return
-                }
-                Thread.sleep(forTimeInterval:3)
-                // Updates the main context
-                let changes = [NSDeletedObjectsKey: objectIDs]
-                NSManagedObjectContext.mergeChanges(fromRemoteContextSave: changes, into: [self.mainContext])
-                print("PERFORMING IN BGR 3")
-                completion(nil)
-
-            } catch {
-                completion( CoreDataManagerError.generic(error) )
-            }
-        }
-        
-    }
- */
-    
-/*
-    // ------------------------------------------------------------
-    // MISC
-    // ------------------------------------------------------------
-    // MARK: - Misc
-    
-    /// Cleans main context, refreshing all loaded objects from Core Data and reseting the context. This allows to remove
-    /// current in-memory unused `NSManagedObject`. Useful after importing or creating large ammounts of data.
-    ///
-    public func cleanMainContext(){
-        for object in mainContext.registeredObjects {
-            mainContext.refresh(object, mergeChanges: false)
-        }
-        
-        mainContext.reset()
-    }
-*/
     
 }
