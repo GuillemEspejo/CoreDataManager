@@ -58,7 +58,9 @@ class ViewController: UIViewController {
         self.stackManager.setup(withModel:"Test",
                                 type: .inmemory ,
                                 completion: completionBlock )
-
+ 
+        
+        
     }
     
     // ------------------------------------------------------------
