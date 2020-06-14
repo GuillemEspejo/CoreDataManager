@@ -25,7 +25,7 @@ class ViewController: UIViewController {
             task.title = "Task \(i)"
             task.done = false
         }
-        Thread.sleep(forTimeInterval: 1.5)
+        Thread.sleep(forTimeInterval: 1.5) // Simulates longer operation
     }
     
     // Block used when updating objects
@@ -33,7 +33,7 @@ class ViewController: UIViewController {
         for task in fetchedObjects{
             task.done = true
         }
-        Thread.sleep(forTimeInterval: 1.5)
+        Thread.sleep(forTimeInterval: 1.5) // Simulates longer operation
     }
     
     // ------------------------------------------------------------
@@ -50,7 +50,7 @@ class ViewController: UIViewController {
                     print("Core Data setup ended")
                 
                 case .failure(let error):
-                    print("SETUP ERROR!: \(error)")
+                    print("Core Data setup error: \(error)")
             }
         }
       
@@ -59,14 +59,13 @@ class ViewController: UIViewController {
                                 type: .inmemory ,
                                 completion: completionBlock )
  
-        
-        
     }
     
     // ------------------------------------------------------------
     // CREATION
     // ------------------------------------------------------------
     // MARK: - Creation
+    // Sync
     @IBAction func didTapCreate(_ sender: Any) {
         self.labelResults.text = "Awaiting results..."
         
@@ -82,6 +81,7 @@ class ViewController: UIViewController {
         synchronicityLoop()
     }
     
+    // Async
     @IBAction func didTapCreateAsync(_ sender: Any) {
         self.labelResults.text = "Awaiting results..."
         
@@ -103,6 +103,7 @@ class ViewController: UIViewController {
     // FETCHING
     // ------------------------------------------------------------
     // MARK: - Fetching
+    // Sync
     @IBAction func didTapFetch(_ sender: Any) {
         self.labelResults.text = "Awaiting results..."
         
@@ -126,6 +127,7 @@ class ViewController: UIViewController {
         
     }
     
+    // Async
     @IBAction func didTapFetchAsync(_ sender: Any) {
         self.labelResults.text = "Awaiting results..."
 
@@ -154,6 +156,7 @@ class ViewController: UIViewController {
     // UPDATE
     // ------------------------------------------------------------
     // MARK: - Update
+    // Sync
     @IBAction func didTapUpdate(_ sender: Any) {
         self.labelResults.text = "Awaiting results..."
         
@@ -181,6 +184,7 @@ class ViewController: UIViewController {
     // DELETE
     // ------------------------------------------------------------
     // MARK: - Delete
+    // Sync
     @IBAction func didTapDelete(_ sender: Any) {
         self.labelResults.text = "Awaiting results..."
 
@@ -197,6 +201,7 @@ class ViewController: UIViewController {
         synchronicityLoop()
     }
     
+    // Async
     @IBAction func didTapDeleteAsync(_ sender: Any) {
         self.labelResults.text = "Awaiting results..."
 

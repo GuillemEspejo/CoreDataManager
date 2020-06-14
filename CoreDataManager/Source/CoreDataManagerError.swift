@@ -8,7 +8,10 @@
 
 import Foundation
 
-// Custom error management
+/// CoreDataManager custom errors
+///
+/// This values are viewed from the outside of the framework as a normal Error with a
+/// description set.
 enum CoreDataManagerError : Error{
     case setupNotCalled
     case nilFetch

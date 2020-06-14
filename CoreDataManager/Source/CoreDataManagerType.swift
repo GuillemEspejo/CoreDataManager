@@ -9,7 +9,12 @@
 import Foundation
 import CoreData
 
-// Custom type management
+/// Stack type
+///
+/// An enum that represents the available Core Data stack types used by CoreDataManager.
+/// The enum values are directly tied to Core Data string types.
+///
+/// Used when calling the setup method.
 public enum CoreDataManagerType {
     case standard
     case inmemory

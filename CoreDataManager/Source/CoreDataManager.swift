@@ -104,6 +104,7 @@ public final class CoreDataManager {
         description.configuration = "Default"
         persistentContainer.persistentStoreDescriptions = [description]
         
+        // Load in background...
         persistentContainerQueue.addOperation {
             self.persistentContainer.loadPersistentStores { description, error in
                 DispatchQueue.main.async {
@@ -249,6 +250,8 @@ public final class CoreDataManager {
         
         var result : Result<[NSManagedObject],Error>!
         let context = mainContext!
+        
+        // Blocking!
         context.performAndWait {
             do{
                 let fetchResults = try context.fetch(request)
@@ -355,9 +358,9 @@ public final class CoreDataManager {
         }
         
         var operationError : Error?
+        let context = self.mainContext!
         
         // Blocking!
-        let context = self.mainContext!
         context.performAndWait {
             block()
             if context.hasChanges {
@@ -406,6 +409,8 @@ public final class CoreDataManager {
         var operationError : CoreDataManagerError?
         var deletedCount = 0
         let context = self.mainContext!
+        
+        // Blocking!
         context.performAndWait {
             do {
                 let objects = try context.fetch(request)
