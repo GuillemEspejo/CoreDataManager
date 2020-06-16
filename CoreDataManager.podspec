@@ -1,5 +1,5 @@
 Pod::Spec.new do |spec|
-  spec.name         = "CoreDataManager"
+  spec.name         = "GECoreDataManager"
   spec.version      = "1.0.0"
   spec.summary      = "Simple and easy to use Core Data Manager"
   spec.description  = <<-DESC

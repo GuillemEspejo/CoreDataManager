@@ -33,7 +33,7 @@ It works as a typical Core Data stack based on `NSPersistentContainer` setup, gi
 [CocoaPods](https://cocoapods.org) is a dependency manager for Cocoa projects. For usage and installation instructions, visit their website. To integrate CoreDataManager into your Xcode project using CocoaPods, specify it in your `Podfile`:
 
 ```ruby
-pod 'CoreDataManager'
+pod 'GECoreDataManager'
 ```
 
 ## Setup
