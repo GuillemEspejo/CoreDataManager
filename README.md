@@ -104,17 +104,36 @@ This examples are all called from the main thread. CoreDataManager will execute 
 #### Synchronous Creation
 
 ```swift
-¡
-    // Creation block, TodoTask is an NSManagedObject subclass
-    let createBlock = { (context:NSManagedObjectContext) in
-        let task = TodoTask(context: context)
-        task.title = "To do task"
-        task.done = false
-    }
+// Creation block, TodoTask is an NSManagedObject subclass
+let createBlock = { (context:NSManagedObjectContext) in
+    let task = TodoTask(context: context)
+    task.title = "To do task"
+    task.done = false
+}
 
-    // stack is already inited...
-    let result = stack.createObject(using:createBlock)
+// stack is already inited...
+let result = stack.createObject(using:createBlock)
 
+switch result {
+    case .success:
+        print("Created objects successfuly")
+    
+    case .failure(let error):
+        print("Error creating: \(error.localizedDescription)")
+}
+```
+#### Asynchronous Creation
+
+```swift
+// Creation block, TodoTask is an NSManagedObject subclass
+let createBlock = { (context:NSManagedObjectContext) in
+    let task = TodoTask(context: context)
+    task.title = "To do task"
+    task.done = false
+}
+
+// Completion block, has a Result parameter
+let completionBlock = { (result: Result<Void,Error>) in
     switch result {
         case .success:
             print("Created objects successfuly")
@@ -122,44 +141,36 @@ This examples are all called from the main thread. CoreDataManager will execute 
         case .failure(let error):
             print("Error creating: \(error.localizedDescription)")
     }
-¡
-```
-#### Asynchronous Creation
+}
 
-```swift
-¡
-    // Creation block, TodoTask is an NSManagedObject subclass
-    let createBlock = { (context:NSManagedObjectContext) in
-        let task = TodoTask(context: context)
-        task.title = "To do task"
-        task.done = false
-    }
-
-    // Completion block, has a Result parameter
-    let completionBlock = { (result: Result<Void,Error>) in
-        switch result {
-            case .success:
-                print("Created objects successfuly")
-            
-            case .failure(let error):
-                print("Error creating: \(error.localizedDescription)")
-        }
-    }
-    
-    // stack is already inited...
-    stack.createObjectAsync(using:createBlock, completion: completionBlock)
-¡
+// stack is already inited...
+stack.createObjectAsync(using:createBlock, completion: completionBlock)
 ```
 
 #### Synchronous Fetch
 
 ```swift
-¡
+let fetchRequest = NSFetchRequest<NSManagedObject>(entityName: "TodoTask")
+// stack is already inited...
+let result = stack.fetchObject(using: fetchRequest)
+
+switch result {
+    case let .success(objects):
+        let castedObjects = objects.map { (object) -> TodoTask in
+            return object as! TodoTask
+        }
+        print(castedObjects)
     
-    let fetchRequest = NSFetchRequest<NSManagedObject>(entityName: "TodoTask")
-    // stack is already inited...
-    let result = stack.fetchObject(using: fetchRequest)
-    
+    case .failure(let error):
+        print("Error fetching: \(error.localizedDescription)")
+}
+```
+#### Asynchronous Fetch
+
+```swift
+let fetchRequest = NSFetchRequest<NSManagedObject>(entityName: "TodoTask")
+
+let completionBlock = { (result : Result<[NSManagedObject],Error>) in
     switch result {
         case let .success(objects):
             let castedObjects = objects.map { (object) -> TodoTask in
@@ -170,93 +181,67 @@ This examples are all called from the main thread. CoreDataManager will execute 
         case .failure(let error):
             print("Error fetching: \(error.localizedDescription)")
     }
-¡
-```
-#### Asynchronous Fetch
+}
 
-```swift
-¡
-    let fetchRequest = NSFetchRequest<NSManagedObject>(entityName: "TodoTask")
-    
-    let completionBlock = { (result : Result<[NSManagedObject],Error>) in
-        switch result {
-            case let .success(objects):
-                let castedObjects = objects.map { (object) -> TodoTask in
-                    return object as! TodoTask
-                }
-                print(castedObjects)
-            
-            case .failure(let error):
-                print("Error fetching: \(error.localizedDescription)")
-        }
-    }
-    
-    // stack is already inited...
-    stack.fetchObjectAsync(using: fetchRequest, completion: completionBlock)
-¡
+// stack is already inited...
+stack.fetchObjectAsync(using: fetchRequest, completion: completionBlock)
 ```
 
 #### Synchronous Update
 
 ```swift
-¡
-    // TodoTask fetched anywhere...
-    let task = fetchedTasks.first!
+// TodoTask fetched anywhere...
+let task = fetchedTasks.first!
 
-    let updateBlock = {
-        task.done = true // Was false
-    }
+let updateBlock = {
+    task.done = true // Was false
+}
 
-    // stack is already inited...
-    let updateResult = stack.updateObject(using: updateBlock)
+// stack is already inited...
+let updateResult = stack.updateObject(using: updateBlock)
+
+switch updateResult {
+    case .success:
+        print("Updated objects successfuly")
     
-    switch updateResult {
-        case .success:
-            print("Updated objects successfuly")
-        
-        case .failure(let error):
-            print("Error updating: \(error.localizedDescription)")
-    }
-¡
+    case .failure(let error):
+        print("Error updating: \(error.localizedDescription)")
+}
 ```
 
 #### Synchronous Delete
 
 ```swift
-¡
-    let fetchRequest = NSFetchRequest<NSManagedObject>(entityName: "TodoTask")
-    
-    // stack is already inited...
-    let result = stackManager.deleteObject(using: fetchRequest)
-    
-    switch result {
-        case .success(let deletedCount):
-            print("Deleted \(deletedCount) 'Todo' tasks")
-            
-        case .failure(let error):
-            print("Error updating: \(error.localizedDescription)")
-    }
-¡
+let fetchRequest = NSFetchRequest<NSManagedObject>(entityName: "TodoTask")
+
+// stack is already inited...
+let result = stackManager.deleteObject(using: fetchRequest)
+
+switch result {
+    case .success(let deletedCount):
+        print("Deleted \(deletedCount) 'Todo' tasks")
+        
+    case .failure(let error):
+        print("Error updating: \(error.localizedDescription)")
+}
 ```
 #### Asynchronous Delete
 
 ```swift
-¡
-    let fetchRequest = NSFetchRequest<NSManagedObject>(entityName: "TodoTask")
-    
-    let completionBlock = { (result : Result<Int,Error>) in
-        switch result {
-            case let .success(deletedCount):
-                print("Deleted \(deletedCount) 'Todo' tasks")
-            
-            case .failure(let error):
-                print("Error updating: \(error.localizedDescription)")
-        }
+let fetchRequest = NSFetchRequest<NSManagedObject>(entityName: "TodoTask")
+
+let completionBlock = { (result : Result<Int,Error>) in
+    switch result {
+        case let .success(deletedCount):
+            print("Deleted \(deletedCount) 'Todo' tasks")
+        
+        case .failure(let error):
+            print("Error updating: \(error.localizedDescription)")
     }
-    
-    // stack is already inited...
-    stack.deleteObjectAsync(from: fetchRequest, completion: completionBlock)
-¡
+}
+
+// stack is already inited...
+stack.deleteObjectAsync(from: fetchRequest, completion: completionBlock)
 ```
 
 ## Example
