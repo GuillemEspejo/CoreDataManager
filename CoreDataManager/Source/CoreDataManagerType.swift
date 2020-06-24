@@ -15,19 +15,17 @@ import CoreData
 /// The enum values are directly tied to Core Data string types.
 ///
 /// Used when calling the setup method.
-public enum CoreDataManagerType {
+public enum CoreDataManagerType: Equatable {
     case standard
     case inmemory
     case binary
     
-    func getString() -> String{
+    public var typeString: String {
         switch self {
-            case .standard:
-                return NSSQLiteStoreType
-            case .inmemory:
-                return NSInMemoryStoreType
-            case .binary:
-                return NSBinaryStoreType
+            case .standard: return NSSQLiteStoreType
+            case .binary: return NSBinaryStoreType
+            case .inmemory: return NSInMemoryStoreType
         }
     }
+
 }

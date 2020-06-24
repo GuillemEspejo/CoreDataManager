@@ -56,7 +56,7 @@ class ViewController: UIViewController {
       
         // Stack async setup
         self.stackManager.setup(withModel:"Test",
-                                type: .inmemory ,
+                                type: .standard ,
                                 completion: completionBlock )
  
     }

@@ -43,6 +43,7 @@ public final class CoreDataManager {
         }
         let context = persistentContainer.viewContext
         context.shouldDeleteInaccessibleFaults = true
+        context.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
         context.automaticallyMergesChangesFromParent = true
         return context
     }()
@@ -98,15 +99,25 @@ public final class CoreDataManager {
             completion( .failure(error) )
             return
         }
-    
+        
         let description = NSPersistentStoreDescription()
-        description.type = type.getString()
+        description.type = type.typeString
         description.configuration = "Default"
+        
+        let folderURL = try! FileManager.default.url(for: .applicationSupportDirectory,
+                                                    in: .userDomainMask,
+                                                    appropriateFor: nil,
+                                                    create: true)
+        let fileURL = folderURL.appendingPathComponent( modelName + ".sqlite")
+        
+        description.url = fileURL
         persistentContainer.persistentStoreDescriptions = [description]
         
         // Load in background...
         persistentContainerQueue.addOperation {
             self.persistentContainer.loadPersistentStores { description, error in
+                print("DESC: \(description)")
+                 
                 DispatchQueue.main.async {
                     if let error = error {
                         completion( .failure(error) )
