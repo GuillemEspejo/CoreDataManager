@@ -57,7 +57,7 @@ class ViewController: UIViewController {
                     print("Core Data setup ended")
                   
                 case .failure(let error):
-                print("Core Data setup error: \(error)")
+                    print("Core Data setup error: \(error)")
             }
         }
         
@@ -91,9 +91,9 @@ On the other hand `backgroundContext` will allow you to use it and access its ob
 
 ## Usage via CRUD operations
 
-If you use CoreDataManager via CRUD operations, you will normally have two types of methods: Synchronous and asynchronous. There is only one exception, as there is no asynchronous Update due to the nature of the operation.
+If you use CoreDataManager via CRUD operations, you will normally have two types of methods: Synchronous and asynchronous. There is only one exception, as there is no asynchronous Update due to its own nature.
 
-Depending on the operation, you will have to provide a block representing the operation you want to make or you will have to provide a `NSFetchRequest`. You will always receive via method return type or via completion block a `Result` instance indicating success or failure.
+Depending on the method, you will have to provide a block representing the operation you want to make or you will have to provide a `NSFetchRequest`. You will always receive via method return type or via completion block a `Result` instance indicating success or failure.
 
 In the Example project you can find examples on how to use this methods.
 
