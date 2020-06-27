@@ -17,28 +17,18 @@ import CoreData
 ///
 public final class CoreDataManager {
 
-    public static let shared = CoreDataManager()
-    
-    private var setupWasCalled = false
-    private var modelName : String!
-    
-    private var persistentContainerQueue : OperationQueue
-
-    
     // ------------------------------------------------------------
     // PROPERTIES
     // ------------------------------------------------------------
     // MARK: - Properties
-    private lazy var persistentContainer: NSPersistentContainer! = {
-        let persistentContainer = NSPersistentContainer(name: modelName )
-        return persistentContainer
-    }()
+    //Public
+    public static let shared = CoreDataManager()
     
     /// An instance of `NSManagedObjectContext` that can be used for standard operations.
     /// It's assigned automatically to the main queue.
     public lazy var mainContext: NSManagedObjectContext? = {
         guard setupWasCalled == true else{
-            print("CoreDataManager ERROR: Setup was not called before accessing main context.")
+            print( CoreDataManagerError.setupNotCalled.localizedDescription )
             return nil
         }
         let context = persistentContainer.viewContext
@@ -53,7 +43,7 @@ public final class CoreDataManager {
     /// It's assigned automatically to a private background queue.
     public lazy var backgroundContext: NSManagedObjectContext? = {
         guard setupWasCalled == true else{
-            print("CoreDataManager ERROR: Setup was not called before accessing background context.")
+            print( CoreDataManagerError.setupNotCalled.localizedDescription )
             return nil
         }
         let context = persistentContainer.newBackgroundContext()
@@ -61,17 +51,29 @@ public final class CoreDataManager {
         context.automaticallyMergesChangesFromParent = true
         return context
     }()
-
     
+    //Private
+    private lazy var persistentContainer: NSPersistentContainer! = {
+        let persistentContainer = NSPersistentContainer(name: modelName )
+        return persistentContainer
+    }()
+    
+    private var setupWasCalled = false
+    private var modelName : String!
+    private var stackType : CoreDataManagerType!
+    private var persistentContainerQueue : OperationQueue
+
+
     // ------------------------------------------------------------
-    // INIT-DEINIT
+    // INIT
     // ------------------------------------------------------------
-    // MARK: - Init-Deinit
+    // MARK: - Init
     private init(){
         persistentContainerQueue = OperationQueue()
         persistentContainerQueue.maxConcurrentOperationCount = 1
         persistentContainerQueue.name = "CoreDataManager Queue"
     }
+
     
     // ------------------------------------------------------------
     // SETUP
@@ -93,6 +95,7 @@ public final class CoreDataManager {
 
         setupWasCalled = true
         modelName = name
+        stackType = type
         
         guard Bundle.main.url(forResource: modelName, withExtension: "momd") != nil else{
             let error = CoreDataManagerError.modelNotFound(modelName)
@@ -100,24 +103,12 @@ public final class CoreDataManager {
             return
         }
         
-        let description = NSPersistentStoreDescription()
-        description.type = type.typeString
-        description.configuration = "Default"
-        
-        let folderURL = try! FileManager.default.url(for: .applicationSupportDirectory,
-                                                    in: .userDomainMask,
-                                                    appropriateFor: nil,
-                                                    create: true)
-        let fileURL = folderURL.appendingPathComponent( modelName + ".sqlite")
-        
-        description.url = fileURL
+        let description = getStoreDescription()
         persistentContainer.persistentStoreDescriptions = [description]
         
         // Load in background...
         persistentContainerQueue.addOperation {
             self.persistentContainer.loadPersistentStores { description, error in
-                print("DESC: \(description)")
-                 
                 DispatchQueue.main.async {
                     if let error = error {
                         completion( .failure(error) )
@@ -130,7 +121,18 @@ public final class CoreDataManager {
 
     }
     
-    
+    private func getStoreDescription() -> NSPersistentStoreDescription{
+        let description = NSPersistentStoreDescription()
+        description.type = stackType.typeString
+        description.configuration = "Default"
+        
+        let url = NSPersistentContainer.defaultDirectoryURL()
+        let fileURL = url.appendingPathComponent( modelName + ".sqlite")
+        
+        description.url = fileURL
+        
+        return description
+    }
    
     // ------------------------------------------------------------
     // CREATE OPERATIONS
@@ -254,12 +256,12 @@ public final class CoreDataManager {
     /// - Returns:
     ///   `Result` instance, containing an array with the fetched `NSManagedObject` instances or an `Error` if the operation failed.
     ///
-    public func fetchObject(using request: NSFetchRequest<NSManagedObject>) -> Result<[NSManagedObject],Error> {
+    public func fetchObject<T:NSManagedObject>(using request: NSFetchRequest<T>) -> Result<[T],Error> {
         guard setupWasCalled == true else{
             return .failure( CoreDataManagerError.setupNotCalled )
         }
         
-        var result : Result<[NSManagedObject],Error>!
+        var result : Result<[T],Error>!
         let context = mainContext!
         
         // Blocking!
@@ -288,12 +290,11 @@ public final class CoreDataManager {
     ///
     /// - Parameters:
     ///   - request: The `NSFetchRequest` to use as an entity selector.
-    ///   - completion: A completion block that will be called in the main thread, having a `Result` object representing
-    ///   the operation's result.
+    ///   - completion: A completion block that will be called in the main thread, having a `Result` object representing the operation's result.
     ///   - result: `Result` instance, containing an array with the fetched `NSManagedObject` instances or an `Error` if the operation failed.
     ///
-    public func fetchObjectAsync(using request: NSFetchRequest<NSManagedObject>,
-                                 completion: @escaping (_ result:Result<[NSManagedObject],Error>) ->() ){
+    public func fetchObjectAsync<T:NSManagedObject>(using request: NSFetchRequest<T>,
+                                 completion: @escaping (_ result:Result<[T],Error>) ->() ){
         
         persistentContainerQueue.addOperation(){
             
@@ -315,12 +316,11 @@ public final class CoreDataManager {
                
                 // We refetch objects from its ObjectID in the main queue
                 DispatchQueue.main.async {
-                    var objectList = [NSManagedObject]()
+                    var objectList = [T]()
                     let context = self.mainContext!
                     for item in result {
-                        let itemID = item.objectID
-                        let queueSafeItem = context.object(with: itemID)
-                        objectList.append(queueSafeItem)
+                        let queueSafeItem = context.object(with: item.objectID)
+                        objectList.append(queueSafeItem as! T)
                     }
                     completion( .success(objectList) )
                 }
@@ -408,11 +408,11 @@ public final class CoreDataManager {
     /// If you want a non blocking option, you must call `deleteObjectAsync`.
     ///
     /// - Parameters:
-    ///   - request: A block where you must modify the `NSManagedObject` subclasses to be updated in Core Data.
+    ///   - request: The `NSFetchRequest` to use as an entity selector.
     /// - Returns:
     ///  `Result` instance, being `Int` or `Error`. If succeeded, Int value will be the count of deleted objects.
     ///
-    public func deleteObject(using request: NSFetchRequest<NSManagedObject>) -> Result<Int,Error> {
+    public func deleteObject<T:NSManagedObject>(using request: NSFetchRequest<T>) -> Result<Int,Error> {
         guard setupWasCalled == true else{
             return .failure( CoreDataManagerError.setupNotCalled )
         }
@@ -459,7 +459,7 @@ public final class CoreDataManager {
     ///   - completion: A completion block that will be called on the main thread, with a `Result` instance as parameter.
     ///   - result: `Result` instance, an Int indicating de count of deleted objects or an `Error` if the operation failed.
     ///
-    public func deleteObjectAsync(from request:NSFetchRequest<NSManagedObject>,
+    public func deleteObjectAsync<T:NSManagedObject>(from request:NSFetchRequest<T>,
                                   completion: @escaping (_ result:Result<Int,Error>) ->() ){
         persistentContainerQueue.addOperation(){
             
@@ -497,4 +497,72 @@ public final class CoreDataManager {
         }
     }
     
+    // ------------------------------------------------------------
+    // MISC OPERATIONS
+    // ------------------------------------------------------------
+    // MARK: - Misc Operations
+    ///
+    /// Removes all entities stored in Core Data.
+    ///
+    /// This method removes all entries stored within Core Data. This method operates
+    /// directly against the persistent store layer, so it will **only** work when using
+    /// an `.standard` stack type.
+    ///
+    /// If you want to clear all the entities when using any other stack type, you have
+    /// to use the basic deletion methods, `deleteObject` or `deleteObjectAsync`
+    ///
+    /// - Returns:
+    ///  `Result` instance, indicating success or failure.
+    ///
+    public func clearAllData() -> Result<Void,Error>{
+        guard self.setupWasCalled == true else{
+            return .failure( CoreDataManagerError.setupNotCalled )
+        }
+        
+        guard self.stackType == .standard else {
+            return .failure( CoreDataManagerError.wrongStoreType(stackType.typeString) )
+        }
+        
+        // Get all entity names
+        let names = persistentContainer.managedObjectModel.entities.map({ (entity) -> String in
+            return entity.name!
+        })
+        
+        // Delete them one by one
+        for name in names {
+            let fetchRequest: NSFetchRequest<NSFetchRequestResult> = NSFetchRequest(entityName: name)
+            fetchRequest.returnsObjectsAsFaults = false
+            let batchDeleteRequest = NSBatchDeleteRequest(fetchRequest: fetchRequest)
+            batchDeleteRequest.resultType = .resultTypeObjectIDs
+            
+            do {
+                let coordinator = persistentContainer.persistentStoreCoordinator
+                let result = try coordinator.execute(batchDeleteRequest,
+                                                     with: backgroundContext!) as! NSBatchDeleteResult
+                // After deletion, changes are made directly in store, but not in memory.
+                // So we must update the objects in memory by merging changes
+                let changes: [AnyHashable: Any] = [
+                    NSDeletedObjectsKey: result.result as! [NSManagedObjectID]
+                ]
+                NSManagedObjectContext.mergeChanges(fromRemoteContextSave: changes, into: [mainContext!,backgroundContext!])
+                
+            } catch let error  {
+                return .failure( CoreDataManagerError.generic(error) )
+            }
+            
+        }
+        
+        return .success( () )
+    }
+    
+    ///
+    /// Returns a list of all NSEntityDescriptions stored within the model.
+    ///
+    /// - Returns:
+    ///  An array of all the `NSEntityDescription` found within the object model.
+    ///
+    public func getEntityList() -> [NSEntityDescription]{
+        return persistentContainer.managedObjectModel.entities
+    }
+
 }

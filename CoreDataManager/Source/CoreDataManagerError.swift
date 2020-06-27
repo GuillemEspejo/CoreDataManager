@@ -16,6 +16,7 @@ enum CoreDataManagerError : Error{
     case setupNotCalled
     case nilFetch
     case modelNotFound(String)
+    case wrongStoreType(String)
     case generic(Error)
 }
 
@@ -31,6 +32,9 @@ extension CoreDataManagerError: LocalizedError {
             
             case .modelNotFound(let modelName):
                 return "CoreDataManager ERROR: Model file '\(modelName)' not found when loading."
+            
+            case .wrongStoreType(let type):
+                return "CoreDataManager ERROR: Operation can't be executed with current stack type '\(type)'."
             
             case .generic(let error):
                 return "CoreDataManager ERROR: \(error)"

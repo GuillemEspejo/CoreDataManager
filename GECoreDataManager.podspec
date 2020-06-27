@@ -1,6 +1,6 @@
 Pod::Spec.new do |spec|
   spec.name         = "GECoreDataManager"
-  spec.version      = "1.0.0"
+  spec.version      = "1.0.2"
   spec.summary      = "Simple and easy to use Core Data Manager"
   spec.description  = <<-DESC
                     CoreDataManager is a simple and easy to use manager class, designed to reduce the need of boilerplate coding when using iOS Core Data persistance. Based on NSPersistentContainer.

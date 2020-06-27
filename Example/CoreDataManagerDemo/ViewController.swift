@@ -42,7 +42,6 @@ class ViewController: UIViewController {
     // MARK: - Lifecycle
     override func viewDidLoad() {
         super.viewDidLoad()
-        
         // Completion block when setup succeeds
         let completionBlock = { (result: Result<Void,Error>) in
             switch result {
@@ -107,17 +106,14 @@ class ViewController: UIViewController {
     @IBAction func didTapFetch(_ sender: Any) {
         self.labelResults.text = "Awaiting results..."
         
-        let fetchRequest = NSFetchRequest<NSManagedObject>(entityName: "TodoTask")
+        let fetchRequest = NSFetchRequest<TodoTask>(entityName: "TodoTask")
         let result = self.stackManager.fetchObject(using: fetchRequest)
     
         switch result {
             case let .success(objects):
                 self.labelResults.text = "Fetched \(objects.count) 'Todo' tasks"
-                let castedObjects = objects.map { (object) -> TodoTask in
-                    return object as! TodoTask
-                }
                 ViewController.fetchedObjects.removeAll()
-                ViewController.fetchedObjects.append(contentsOf: castedObjects)
+                ViewController.fetchedObjects.append(contentsOf: objects)
             
             case .failure(let error):
                 self.labelResults.text = error.localizedDescription
@@ -131,17 +127,14 @@ class ViewController: UIViewController {
     @IBAction func didTapFetchAsync(_ sender: Any) {
         self.labelResults.text = "Awaiting results..."
 
-        let fetchRequest = NSFetchRequest<NSManagedObject>(entityName: "TodoTask")
+        let fetchRequest = NSFetchRequest<TodoTask>(entityName: "TodoTask")
         
-        let completionBlock = { (result : Result<[NSManagedObject],Error>) in
+        let completionBlock = { (result : Result<[TodoTask],Error>) in
             switch result {
                 case let .success(objects):
                     self.labelResults.text = "Fetched \(objects.count) 'Todo' tasks"
-                    let castedObjects = objects.map { (object) -> TodoTask in
-                        return object as! TodoTask
-                    }
                     ViewController.fetchedObjects.removeAll()
-                    ViewController.fetchedObjects.append(contentsOf: castedObjects)
+                    ViewController.fetchedObjects.append(contentsOf: objects)
                 
                 case .failure(let error):
                     self.labelResults.text = error.localizedDescription
@@ -188,7 +181,7 @@ class ViewController: UIViewController {
     @IBAction func didTapDelete(_ sender: Any) {
         self.labelResults.text = "Awaiting results..."
 
-        let fetchRequest = NSFetchRequest<NSManagedObject>(entityName: "TodoTask")
+        let fetchRequest = NSFetchRequest<TodoTask>(entityName: "TodoTask")
         let result = stackManager.deleteObject(using: fetchRequest)
         
         switch result {
@@ -205,7 +198,7 @@ class ViewController: UIViewController {
     @IBAction func didTapDeleteAsync(_ sender: Any) {
         self.labelResults.text = "Awaiting results..."
 
-        let fetchRequest = NSFetchRequest<NSManagedObject>(entityName: "TodoTask")
+        let fetchRequest = NSFetchRequest<TodoTask>(entityName: "TodoTask")
         
         let completionBlock = { (result : Result<Int,Error>) in
             switch result {
@@ -219,6 +212,21 @@ class ViewController: UIViewController {
             
         self.stackManager.deleteObjectAsync(from: fetchRequest, completion: completionBlock)
         synchronicityLoop()
+    }
+    
+    // ------------------------------------------------------------
+    // MISC
+    // ------------------------------------------------------------
+    // MARK: - Misc
+    @IBAction func didTapClearCoreData(_ sender: Any) {
+        let result = self.stackManager.clearAllData()
+        
+        switch result {
+            case .success:
+                self.labelResults.text = "Core Data store cleared!"
+            case .failure(let error):
+                self.labelResults.text = error.localizedDescription
+        }
     }
 
 
@@ -241,6 +249,6 @@ class ViewController: UIViewController {
             }
         }
     }
-    
+
 }
 

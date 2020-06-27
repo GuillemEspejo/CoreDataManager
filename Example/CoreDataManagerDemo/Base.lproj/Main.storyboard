@@ -24,7 +24,7 @@
                             </label>
                             <button opaque="NO" contentMode="scaleToFill" fixedFrame="YES" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="roundedRect" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="bUZ-oE-yDK">
                                 <rect key="frame" x="99" y="157" width="220" height="30"/>
-                                <autoresizingMask key="autoresizingMask" flexibleMinX="YES" flexibleMaxX="YES" flexibleMaxY="YES"/>
+                                <autoresizingMask key="autoresizingMask" flexibleMinX="YES" widthSizable="YES" flexibleMaxX="YES"/>
                                 <state key="normal" title="Create (Blocking)"/>
                                 <connections>
                                     <action selector="didTapCreate:" destination="BYZ-38-t0r" eventType="touchUpInside" id="0Bm-E6-Mwr"/>
@@ -32,7 +32,7 @@
                             </button>
                             <button opaque="NO" contentMode="scaleToFill" fixedFrame="YES" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="roundedRect" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="dUh-qv-jKD">
                                 <rect key="frame" x="99" y="251" width="220" height="30"/>
-                                <autoresizingMask key="autoresizingMask" flexibleMinX="YES" flexibleMaxX="YES" flexibleMaxY="YES"/>
+                                <autoresizingMask key="autoresizingMask" flexibleMinX="YES" widthSizable="YES" flexibleMaxX="YES"/>
                                 <state key="normal" title="Fetch (Blocking)"/>
                                 <connections>
                                     <action selector="didTapFetch:" destination="BYZ-38-t0r" eventType="touchUpInside" id="upt-BD-glK"/>
@@ -40,7 +40,7 @@
                             </button>
                             <button opaque="NO" contentMode="scaleToFill" fixedFrame="YES" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="roundedRect" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="W2K-Gv-lAc">
                                 <rect key="frame" x="99" y="195" width="220" height="30"/>
-                                <autoresizingMask key="autoresizingMask" flexibleMinX="YES" flexibleMaxX="YES" flexibleMaxY="YES"/>
+                                <autoresizingMask key="autoresizingMask" flexibleMinX="YES" widthSizable="YES" flexibleMaxX="YES"/>
                                 <state key="normal" title="Create (Non Blocking)"/>
                                 <connections>
                                     <action selector="didTapCreateAsync:" destination="BYZ-38-t0r" eventType="touchUpInside" id="8MA-QL-lnI"/>
@@ -55,7 +55,7 @@
                             </label>
                             <button opaque="NO" contentMode="scaleToFill" fixedFrame="YES" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="roundedRect" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="xjb-UL-IRk">
                                 <rect key="frame" x="99" y="289" width="220" height="30"/>
-                                <autoresizingMask key="autoresizingMask" flexibleMinX="YES" flexibleMaxX="YES" flexibleMaxY="YES"/>
+                                <autoresizingMask key="autoresizingMask" flexibleMinX="YES" widthSizable="YES" flexibleMaxX="YES"/>
                                 <state key="normal" title="Fetch (Non Blocking)"/>
                                 <connections>
                                     <action selector="didTapFetchAsync:" destination="BYZ-38-t0r" eventType="touchUpInside" id="LDr-h8-Wfi"/>
@@ -63,7 +63,7 @@
                             </button>
                             <button opaque="NO" contentMode="scaleToFill" fixedFrame="YES" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="roundedRect" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="5l5-R2-3hP">
                                 <rect key="frame" x="97" y="436" width="220" height="30"/>
-                                <autoresizingMask key="autoresizingMask" flexibleMinX="YES" flexibleMaxX="YES" flexibleMaxY="YES"/>
+                                <autoresizingMask key="autoresizingMask" flexibleMinX="YES" widthSizable="YES" flexibleMaxX="YES"/>
                                 <state key="normal" title="Delete (Blocking)"/>
                                 <connections>
                                     <action selector="didTapDelete:" destination="BYZ-38-t0r" eventType="touchUpInside" id="ri5-jB-f4W"/>
@@ -71,7 +71,7 @@
                             </button>
                             <button opaque="NO" contentMode="scaleToFill" fixedFrame="YES" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="roundedRect" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="F6C-VF-Wmb">
                                 <rect key="frame" x="97" y="474" width="220" height="30"/>
-                                <autoresizingMask key="autoresizingMask" flexibleMinX="YES" flexibleMaxX="YES" flexibleMaxY="YES"/>
+                                <autoresizingMask key="autoresizingMask" flexibleMinX="YES" widthSizable="YES" flexibleMaxX="YES"/>
                                 <state key="normal" title="Delete (Non Blocking)"/>
                                 <connections>
                                     <action selector="didTapDeleteAsync:" destination="BYZ-38-t0r" eventType="touchUpInside" id="GEg-iZ-slF"/>
@@ -79,10 +79,18 @@
                             </button>
                             <button opaque="NO" contentMode="scaleToFill" fixedFrame="YES" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="roundedRect" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="NUS-Bn-1la">
                                 <rect key="frame" x="97" y="360" width="220" height="30"/>
-                                <autoresizingMask key="autoresizingMask" flexibleMinX="YES" flexibleMaxX="YES" flexibleMaxY="YES"/>
+                                <autoresizingMask key="autoresizingMask" flexibleMinX="YES" widthSizable="YES" flexibleMaxX="YES"/>
                                 <state key="normal" title="Update (Blocking)"/>
                                 <connections>
                                     <action selector="didTapUpdate:" destination="BYZ-38-t0r" eventType="touchUpInside" id="SnY-nE-cF5"/>
+                                </connections>
+                            </button>
+                            <button opaque="NO" contentMode="scaleToFill" fixedFrame="YES" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="roundedRect" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="LRv-7f-lhN">
+                                <rect key="frame" x="99" y="534" width="220" height="30"/>
+                                <autoresizingMask key="autoresizingMask" flexibleMinX="YES" widthSizable="YES" flexibleMaxX="YES"/>
+                                <state key="normal" title="Clear content"/>
+                                <connections>
+                                    <action selector="didTapClearCoreData:" destination="BYZ-38-t0r" eventType="touchUpInside" id="jca-LK-hjt"/>
                                 </connections>
                             </button>
                         </subviews>
