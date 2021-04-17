@@ -23,11 +23,6 @@ let package = Package(
                 name: "CoreDataManager",
                 dependencies: [],
                 path: "Sources"
-             ),
-            .testTarget(
-                name: "CoreDataManagerTests",
-                dependencies: ["CoreDataManager"],
-                path: "Tests"
              )
         ],
         swiftLanguageVersions: [.v5]

@@ -15,7 +15,6 @@
 
 /* Begin PBXFileReference section */
 		"CoreDataManager::CoreDataManager::Product" /* CoreDataManager.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = CoreDataManager.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		OBJ_10 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		OBJ_11 /* CoreDataManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreDataManager.swift; sourceTree = "<group>"; };
 		OBJ_12 /* CoreDataManagerError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreDataManagerError.swift; sourceTree = "<group>"; };
 		OBJ_13 /* CoreDataManagerType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreDataManagerType.swift; sourceTree = "<group>"; };
@@ -54,7 +53,7 @@
 			name = Products;
 			sourceTree = BUILT_PRODUCTS_DIR;
 		};
-		OBJ_5 /*  */ = {
+		OBJ_5 = {
 			isa = PBXGroup;
 			children = (
 				OBJ_6 /* Package.swift */,
@@ -67,7 +66,6 @@
 				OBJ_20 /* README.md */,
 				OBJ_21 /* GECoreDataManager.podspec */,
 			);
-			name = "";
 			sourceTree = "<group>";
 		};
 		OBJ_7 /* Sources */ = {
@@ -82,7 +80,6 @@
 			isa = PBXGroup;
 			children = (
 				OBJ_9 /* CoreDataManager.h */,
-				OBJ_10 /* Info.plist */,
 				OBJ_11 /* CoreDataManager.swift */,
 				OBJ_12 /* CoreDataManagerError.swift */,
 				OBJ_13 /* CoreDataManagerType.swift */,
@@ -140,7 +137,7 @@
 			knownRegions = (
 				en,
 			);
-			mainGroup = OBJ_5 /*  */;
+			mainGroup = OBJ_5;
 			productRefGroup = OBJ_15 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";

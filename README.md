@@ -36,6 +36,18 @@ It works as a typical Core Data stack based on `NSPersistentContainer` setup, gi
 pod 'GECoreDataManager'
 ```
 
+### Swift Package Manager
+
+The [Swift Package Manager](https://swift.org/package-manager/) is a tool for automating the distribution of Swift code and is integrated into the `swift` compiler. 
+
+Once you have your Swift package set up, adding CoreDataManager as a dependency is as easy as adding it to the `dependencies` value of your `Package.swift`.
+
+```swift
+dependencies: [
+    .package(url: "https://github.com/GuillemEspejo/CoreDataManager.git", .upToNextMajor(from: "1.0.3"))
+]
+```
+
 ## Setup
 
 Before starting to use CoreDataManager, you have to set up the stack. This is done by calling the asynchronous `setup` method. You must pass the model name, the stack type and a completion block as parameters. The completion block will have a Result instance as parameter, allowing you to easily know if something failed.
